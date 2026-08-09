@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Physical Home plus the volume rocker. FPC gestures are handled by the
+         dedicated mBack category and must not masquerade as fixed keys. -->
+    <integer name="config_deviceHardwareKeys">65</integer>
+    <integer name="config_deviceHardwareWakeKeys">65</integer>
+</resources>

@@ -3,9 +3,10 @@ ro.product.board=m86
 ro.board.platform=exynos5
 ro.chipname=exynos7420
 
-# Until the FPC navigation input is independently validated, expose Android's
-# three-button navigation so the system remains operable after first boot.
+# Keep the navigation bar as a fallback while exposing the independently
+# configurable FPC mBack gestures in LineageOS' official Buttons settings.
 qemu.hw.mainkeys=0
+ro.meizu.hardware.mback=true
 
 # Display
 ro.opengles.version=196610

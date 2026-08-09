@@ -1,2 +1,9 @@
-key 158   BACK              VIRTUAL
-key 139   MENU              VIRTUAL
+# Keep every FPC gesture distinct until PhoneWindowManager applies the
+# user-selected mBack action.  The driver reports both slow and quick swipes;
+# collapse those variants by direction, not into Android navigation keys.
+key 158   F9                VIRTUAL
+key 139   F10               VIRTUAL
+key 191   F11               VIRTUAL
+key 193   F11               VIRTUAL
+key 190   F12               VIRTUAL
+key 192   F12               VIRTUAL
