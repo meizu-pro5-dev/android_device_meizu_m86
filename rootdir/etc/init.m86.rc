@@ -11,8 +11,22 @@ on init
 
 on fs
     mount_all /fstab.m86
+    mkdir /cache/m86-lineage-debug 0775 root log
+    write /cache/m86-lineage-boot-stage fs-mounted
+
+on post-fs
+    write /cache/m86-lineage-boot-stage post-fs
 
 on post-fs-data
+    write /cache/m86-lineage-boot-stage post-fs-data
+    # Keep early userspace, framework and kernel log buffers across a failed
+    # boot. Android's supported logcatd service writes under /data/misc/logd
+    # with the correct SELinux domain and rotates at four 1 MiB files.
+    setprop logd.logpersistd.buffer all
+    setprop logd.logpersistd.size 4
+    setprop logd.logpersistd logcatd
+    setprop logd.logpersistd.enable true
+    start m86_boot_sync
     mkdir /data/calibration 0771 wifi wifi
     mkdir /data/system/gps 0770 system system
     mkdir /data/nfc 0770 nfc nfc
@@ -29,6 +43,7 @@ on property:sys.rild_reset=1
     start vendor.ril-daemon
 
 on boot
+    write /cache/m86-lineage-boot-stage boot
     chown bluetooth bluetooth /dev/ttySAC4
     chmod 0660 /dev/ttySAC4
     chown bluetooth bluetooth /sys/class/rfkill/rfkill0/state
@@ -46,8 +61,8 @@ on boot
     chmod 0660 /sys/module/bcmdhd/parameters/firmware_path
     chown system system /sys/devices/13930000.decon_fb/adreg
     chmod 0660 /sys/devices/13930000.decon_fb/adreg
-    chown system system /sys/devices/13930000.decon_fb/backlight/pwm-backlight.0/brightness
-    chmod 0660 /sys/devices/13930000.decon_fb/backlight/pwm-backlight.0/brightness
+    chown system system /sys/class/backlight/pwm-backlight.0/brightness
+    chmod 0660 /sys/class/backlight/pwm-backlight.0/brightness
     chown system system /sys/class/leds/m86_led/brightness
     chmod 0660 /sys/class/leds/m86_led/brightness
     chown cameraserver camera /sys/class/leds/torch0/brightness
@@ -88,6 +103,20 @@ on boot
     chmod 0660 /sys/module/exynos_march_cpu_hotplug/parameters/cl1_booster
     chown system system /sys/module/exynos_march_cpu_hotplug/parameters/min_cpu_boosted
     chmod 0660 /sys/module/exynos_march_cpu_hotplug/parameters/min_cpu_boosted
+
+on property:sys.boot_completed=1
+    write /cache/m86-lineage-boot-stage boot-completed
+
+# pstore is disabled in the current kernel. logpersistd retains all Android
+# buffers (including kernel) under /data/misc/logd with its native SELinux
+# label. This low-volume init-domain heartbeat periodically flushes those logs
+# without feeding cache-write AVCs back into the buffers being recorded.
+service m86_boot_sync /system/bin/sh /init.m86.boot-sync.sh
+    class core
+    user root
+    group root log system
+    disabled
+    seclabel u:r:init:s0
 
 service wpa_supplicant /vendor/bin/hw/wpa_supplicant \
     -puse_p2p_group_interface=1 \

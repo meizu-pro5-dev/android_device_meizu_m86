@@ -9,7 +9,9 @@
 #include <sys/types.h>
 
 #include <cutils/threads.h>
+#include <gui/GLConsumer.h>
 #include <log/log.h>
+#include <ui/GraphicBuffer.h>
 
 namespace android {
 
@@ -49,4 +51,34 @@ extern "C" void set_value()
 extern "C" void* _ZN7android5FenceD1Ev(void* instance)
 {
     return instance;
+}
+
+/*
+ * GLConsumer::getCurrentBuffer gained an optional out-slot argument after
+ * the Flyme camera stack was built. Preserve the old no-argument entry point
+ * and forward it to Android 10's implementation.
+ */
+android::sp<android::GraphicBuffer> legacyGetCurrentBuffer(
+        const android::GLConsumer* consumer)
+        __asm__("_ZNK7android10GLConsumer16getCurrentBufferEv");
+
+android::sp<android::GraphicBuffer> legacyGetCurrentBuffer(
+        const android::GLConsumer* consumer)
+{
+    return consumer->getCurrentBuffer(nullptr);
+}
+
+/*
+ * GraphicBuffer::lock gained optional bytes-per-pixel and bytes-per-stride
+ * result arguments after the Flyme camera libraries were built. Keep the old
+ * two-argument member ABI and forward it to Android 10's implementation.
+ */
+android::status_t legacyGraphicBufferLock(android::GraphicBuffer* buffer,
+        uint32_t usage, void** vaddr)
+        __asm__("_ZN7android13GraphicBuffer4lockEjPPv");
+
+android::status_t legacyGraphicBufferLock(android::GraphicBuffer* buffer,
+        uint32_t usage, void** vaddr)
+{
+    return buffer->lock(usage, vaddr, nullptr, nullptr);
 }

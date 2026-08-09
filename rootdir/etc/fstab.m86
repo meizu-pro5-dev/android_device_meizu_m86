@@ -1,6 +1,6 @@
 # <src> <mnt_point> <type> <mnt_flags> <fs_mgr_flags>
-/dev/block/platform/15570000.ufs/by-name/system    /system   ext4  ro,noatime,discard,barrier=0                                         wait
-/dev/block/platform/15570000.ufs/by-name/cache     /cache    ext4  noatime,nosuid,nodev,nomblk_io_submit,errors=panic                   wait,check
+/dev/block/platform/15570000.ufs/by-name/system    /system   ext4  ro,noatime,discard,barrier=0                                         wait,first_stage_mount
+/dev/block/platform/15570000.ufs/by-name/cache     /cache    ext4  noatime,nosuid,nodev,nomblk_io_submit,errors=panic            wait,check
 /dev/block/platform/15570000.ufs/by-name/efs       /efs      ext4  noatime,nosuid,nodev                                                wait,check
 /dev/block/platform/15570000.ufs/by-name/mnv       /mnv      ext4  ro,noload                                                           wait
 /dev/block/platform/15570000.ufs/by-name/custom    /custom   ext4  ro,noload,errors=panic                                              wait

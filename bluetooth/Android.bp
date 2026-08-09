@@ -1,0 +1,22 @@
+cc_binary {
+    name: "android.hardware.bluetooth@1.0-service.m86",
+    defaults: ["hidl_defaults"],
+    stem: "android.hardware.bluetooth@1.0-service",
+    relative_install_path: "hw",
+    vendor: true,
+    compile_multilib: "32",
+    init_rc: ["android.hardware.bluetooth@1.0-service.m86.rc"],
+    srcs: ["service.cpp"],
+
+    shared_libs: [
+        "android.hardware.bluetooth@1.0",
+        "libbase",
+        "libcutils",
+        "libdl",
+        "libhardware",
+        "libhidlbase",
+        "libhidltransport",
+        "liblog",
+        "libutils",
+    ],
+}

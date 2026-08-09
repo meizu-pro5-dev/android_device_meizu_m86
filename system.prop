@@ -3,14 +3,47 @@ ro.product.board=m86
 ro.board.platform=exynos5
 ro.chipname=exynos7420
 
+# Until the FPC navigation input is independently validated, expose Android's
+# three-button navigation so the system remains operable after first boot.
+qemu.hw.mainkeys=0
+
 # Display
 ro.opengles.version=196610
+ro.sf.lcd_density=480
+
+# Android 10 otherwise falls back to a 16 MiB application heap. Match the
+# maintained Exynos 7420 profile used by the Note 5 generation so system_server
+# and SystemUI can complete startup without continuous blocking collections.
+dalvik.vm.image-dex2oat-filter=speed
+dalvik.vm.dex2oat-filter=speed
+dalvik.vm.heapgrowthlimit=256m
+dalvik.vm.heapstartsize=8m
+dalvik.vm.heapsize=512m
+dalvik.vm.heaptargetutilization=0.75
+dalvik.vm.heapminfree=512k
+dalvik.vm.heapmaxfree=8m
+
+# universal7420 uses the legacy Exynos OMX stack. Starting Android 10's CCodec
+# service as well makes mediaswcodec repeatedly load C2 modules and the m86
+# kernel stops responding during framework bring-up.
+debug.stagefright.ccodec=0
+
+# Meizu PRO 5 ES9018K2M HiFi DAC. The framework uses this capability flag to
+# expose and restore the wired-media HiFi policy.
+ro.meizu.hardware.hifi=true
+ro.hardware.hifi.support=true
 
 # Storage
 persist.sys.isolated_storage=false
+# Keep the device default outside /data/property so a stale value written by
+# an earlier Android 10 build cannot re-enable isolated storage after a dirty
+# flash. StorageManagerService copies this read-only default to the runtime
+# persist property once DeviceConfig/local overrides have been considered.
+ro.sys.isolated_storage=false
 
-# The 3.10 FunctionFS implementation has no asynchronous I/O support. Android
-# 10 adbd must use its synchronous compatibility path on this kernel.
+# Android 10's legacy FunctionFS transport otherwise submits Linux AIO to a
+# 3.10 f_fs implementation which predates that support.  Keep the descriptor
+# readiness handshake but use synchronous endpoint reads and writes.
 sys.usb.ffs.aio_compat=1
 
 # Wi-Fi

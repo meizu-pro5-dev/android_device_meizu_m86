@@ -1,12 +1,12 @@
 on init
-    write /sys/class/android_usb/android0/iSerial ${ro.serialno}
     write /sys/class/android_usb/android0/f_rndis/manufacturer Meizu
     write /sys/class/android_usb/android0/f_rndis/vendorID 2A45
     write /sys/class/android_usb/android0/f_rndis/wceis 1
 
-# Android 10's generic legacy-gadget rc owns the none, adb, and accessory
-# states. m86 supplies FunctionFS plus only the MTP/PTP/RNDIS states absent
-# from that file, using IDs verified in the latest Flyme 8 ramdisk.
+# Mount FunctionFS before Android's generic legacy-gadget state machine starts
+# adbd.  Aliasing "adb" to f_fs makes the Samsung android_usb driver defer its
+# physical connect in ffs_function_enable(); writing descriptors to ep0 invokes
+# functionfs_ready_callback(), which is the kernel-side readiness gate.
 on fs
     mkdir /dev/usb-ffs 0770 shell shell
     mkdir /dev/usb-ffs/adb 0770 shell shell
@@ -15,12 +15,54 @@ on fs
     mkdir /dev/bus 0755 root root
     mkdir /dev/bus/usb 0755 root root
 
+# Override Android's generic fallback identity after its action has selected
+# the adb function.  Samsung's Exynos 7420 legacy-gadget implementation
+# restarts adbd after every composition containing FunctionFS.  Doing the same
+# here makes adbd reopen ep0 and publish descriptors for the newly bound
+# gadget, instead of leaving the host attached to stale endpoints.
+on property:sys.usb.config=adb && property:sys.usb.configfs=0
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/idVendor 2A45
+    write /sys/class/android_usb/android0/idProduct 0C02
+    write /sys/class/android_usb/android0/functions adb
+    write /sys/class/android_usb/android0/bDeviceClass 0
+    write /sys/class/android_usb/android0/bDeviceSubClass 0
+    write /sys/class/android_usb/android0/bDeviceProtocol 0
+    write /sys/class/android_usb/android0/enable 1
+    stop adbd
+    start adbd
+    setprop sys.usb.state adb
+
 on boot
     write /sys/class/android_usb/android0/iManufacturer ${ro.product.manufacturer}
     write /sys/class/android_usb/android0/iProduct ${ro.product.model}
-    write /sys/class/android_usb/android0/iSerial ${ro.serialno}
     write /sys/class/android_usb/android0/f_mass_storage/inquiry_string "Meizu"
     write /sys/class/android_usb/android0/f_mass_storage/lun/nofua 1
+
+service m86-usb-serial /system/bin/m86_usb_serial
+    class core
+    user root
+    group root
+    disabled
+    oneshot
+    seclabel u:r:init:s0
+
+# /data is available here and ueventd has created the private-partition nodes.
+# Publishing the factory serial also releases the Bluetooth HAL, whose stable
+# fallback address is derived from the same per-handset identity.
+on post-fs-data
+    # Android 10 adbd otherwise selects the newer nonblocking/AIO FunctionFS
+    # path, which this Samsung 3.10 gadget stack does not implement reliably.
+    setprop persist.adb.nonblocking_ffs 0
+    start m86-usb-serial
+
+on property:vendor.m86.identity.ready=1
+    # m86-usb-serial disconnects and rebinds the gadget to install the factory
+    # serial.  Reopen FunctionFS afterwards so the new USB instance never
+    # inherits requests or endpoint state from the pre-serial connection.
+    stop adbd
+    start adbd
+    start vendor.bluetooth-1-0
 
 on post-fs-data
     chown system system /sys/class/android_usb/android0/f_mass_storage/lun/file
@@ -44,6 +86,7 @@ on property:sys.usb.config=mtp,adb && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/functions ${sys.usb.config}
     write /sys/class/android_usb/android0/bDeviceClass 0
     write /sys/class/android_usb/android0/enable 1
+    stop adbd
     start adbd
     setprop sys.usb.state ${sys.usb.config}
 
@@ -63,6 +106,7 @@ on property:sys.usb.config=ptp,adb && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/functions ${sys.usb.config}
     write /sys/class/android_usb/android0/bDeviceClass 0
     write /sys/class/android_usb/android0/enable 1
+    stop adbd
     start adbd
     setprop sys.usb.state ${sys.usb.config}
 
@@ -82,5 +126,6 @@ on property:sys.usb.config=rndis,adb && property:sys.usb.configfs=0
     write /sys/class/android_usb/android0/functions ${sys.usb.config}
     write /sys/class/android_usb/android0/bDeviceClass 224
     write /sys/class/android_usb/android0/enable 1
+    stop adbd
     start adbd
     setprop sys.usb.state ${sys.usb.config}

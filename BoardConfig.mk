@@ -43,7 +43,24 @@ TARGET_SEC_FP_USES_PERCENTAGE_SAMPLES :=
 # five symbols no longer exported by Android 10 and expects SensorManager from
 # the old libgui dependency graph. Inject only the source-built m86 shim.
 TARGET_LD_SHIM_LIBS := \
-    /system/lib/libexynoscamera.so|/system/lib/libm86camera_shim.so
+    /system/lib/libexynoscamera.so|/system/lib/libm86camera_shim.so \
+    /system/bin/gpsd|/system/lib64/libm86gps_shim.so
+
+# Flyme's 32-bit Exynos OMX components use the pre-O GraphicBufferMapper
+# four-argument lock ABI. Android 10 kept the operation but extended its C++
+# signature with stride outputs, so inject the compatibility symbol into each
+# legacy component when it is loaded by media.codec.
+TARGET_LD_SHIM_LIBS += \
+    /system/lib/omx/libOMX.Exynos.AVC.Decoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.AVC.Encoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.HEVC.Decoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.HEVC.Encoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.MPEG4.Decoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.MPEG4.Encoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.VP8.Decoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.VP8.Encoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.VP9.Decoder.so|/system/lib/libm86omx_shim.so \
+    /system/lib/omx/libOMX.Exynos.WMV.Decoder.so|/system/lib/libm86omx_shim.so
 # Flyme gpsd predates Q and still uses legacy linker greylist/APEX behavior.
 # Scope the compatibility level to this one audited executable.
 TARGET_PROCESS_SDK_VERSION_OVERRIDE := /system/bin/gpsd=27
@@ -95,15 +112,13 @@ TARGET_NO_BOOTLOADER := true
 # Display
 TARGET_SCREEN_HEIGHT := 1920
 TARGET_SCREEN_WIDTH := 1080
-BACKLIGHT_PATH := /sys/devices/13930000.decon_fb/backlight/pwm-backlight.0/brightness
+BACKLIGHT_PATH := /sys/class/backlight/pwm-backlight.0/brightness
 
-# Charger paths are independently present in the historical booting m86 tree;
-# state them here instead of relying on the identical Galaxy defaults.
+# The maintained kernel exposes the fuel gauge under its real power-supply
+# name. Do not inherit the Galaxy-only batt_lp_charging control path.
 WITH_LINEAGE_CHARGER := false
-BOARD_BATTERY_DEVICE_NAME := battery
+BOARD_BATTERY_DEVICE_NAME := bq2753x-0
 BOARD_CHARGER_ENABLE_SUSPEND := true
-BOARD_CHARGING_MODE_BOOTING_LPM := /sys/class/power_supply/battery/batt_lp_charging
-CHARGING_ENABLED_PATH := "/sys/class/power_supply/battery/batt_lp_charging"
 
 # Kernel and stock v0 boot-image geometry. Explicit positive offsets reproduce
 # all four addresses in the verified Flyme header without relying on overflow.
@@ -153,10 +168,11 @@ BOARD_BOOTIMAGE_PARTITION_SIZE := 25161728
 BOARD_RECOVERYIMAGE_PARTITION_SIZE := 33550336
 BOARD_SYSTEMIMAGE_PARTITION_SIZE := 2684350464
 BOARD_USERDATAIMAGE_PARTITION_SIZE := 27241979904
-# Do not inherit Samsung's cache geometry. Its exact size will be recorded
-# when the deferred GPT backup is performed; no cache image is built meanwhile.
-BOARD_CACHEIMAGE_PARTITION_SIZE :=
-BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE :=
+# Live Recovery blockdev inspection identifies m86 cache as sda43 with an
+# exact 536870912-byte capacity. Keep the universal7420 real-/cache layout,
+# using the verified Meizu geometry rather than Samsung's 200 MiB value.
+BOARD_CACHEIMAGE_PARTITION_SIZE := 536870912
+BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_ROOT_EXTRA_FOLDERS += custom mnv
 
 # Legacy non-Treble layout: vendor files live below system/vendor.

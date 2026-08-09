@@ -4,6 +4,10 @@
 
 LOCAL_PATH := device/meizu/m86
 
+# Android 10 leaves tetherable interface lists empty by default. Advertise
+# the Broadcom AP interface so Settings and Tethering expose Wi-Fi hotspot.
+PRODUCT_PACKAGE_OVERLAYS += $(LOCAL_PATH)/overlay
+
 # PRO 5 launched on Android 5.1. This keeps Android 10 compatibility checks in
 # legacy, non-Treble mode while the stock vendor ABI is brought up.
 PRODUCT_SHIPPING_API_LEVEL := 22
@@ -23,10 +27,18 @@ PRODUCT_SOONG_NAMESPACES += \
     hardware/samsung_slsi/exynos7420 \
     hardware/samsung_slsi/openmax
 
+# Read the device's signed-factory serial payload from private slot 0 and
+# publish only its validated serial field to the legacy USB gadget. The helper
+# opens the identity partition read-only and never hardcodes a handset serial.
+PRODUCT_PACKAGES += \
+    m86_usb_serial
+
 # Ramdisk
 PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/rootdir/etc/fstab.m86:$(TARGET_COPY_OUT_RAMDISK)/fstab.m86 \
     $(LOCAL_PATH)/rootdir/etc/fstab.m86:root/fstab.m86 \
     $(LOCAL_PATH)/rootdir/etc/init.m86.rc:root/init.m86.rc \
+    $(LOCAL_PATH)/rootdir/etc/init.m86.boot-sync.sh:root/init.m86.boot-sync.sh \
     $(LOCAL_PATH)/rootdir/etc/init.m86.sensors.rc:root/init.m86.sensors.rc \
     $(LOCAL_PATH)/rootdir/etc/init.m86.usb.rc:root/init.m86.usb.rc \
     $(LOCAL_PATH)/rootdir/etc/ueventd.m86.rc:root/ueventd.m86.rc
@@ -63,9 +75,10 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/com.android.nfc_extras.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.android.nfc_extras.xml \
     frameworks/native/data/etc/handheld_core_hardware.xml:system/etc/permissions/handheld_core_hardware.xml
 
-# Graphics. The verified Flyme set supplies matching 32/64-bit Mali, gralloc,
-# HWC1 and memtrack implementations. These Android 10 wrappers expose that
-# legacy stack without inheriting the Galaxy product or its panel policy.
+# Graphics. The verified Flyme set supplies matching 32/64-bit Mali, HWC1 and
+# memtrack implementations. The source-built Exynos gralloc provides the
+# hardened fbdev path required by Android 10. These wrappers expose that legacy
+# stack without inheriting the Galaxy product or its panel policy.
 # configstore@1.1-service is already supplied by full_base_telephony.
 PRODUCT_PACKAGES += \
     android.hardware.graphics.allocator@2.0-impl \
@@ -73,7 +86,12 @@ PRODUCT_PACKAGES += \
     android.hardware.graphics.composer@2.1-impl \
     android.hardware.graphics.mapper@2.0-impl \
     android.hardware.memtrack@1.0-impl \
+    gralloc.exynos5 \
+    hwcomposer.exynos5 \
+    libcec \
+    libexynosdisplay \
     libfimg \
+    libhdmi \
     libhwc2on1adapter \
     libion
 
@@ -81,7 +99,7 @@ PRODUCT_PACKAGES += \
 # it loads the hash-locked m86 libbt-vendor.so at runtime.
 PRODUCT_PACKAGES += \
     android.hardware.bluetooth@1.0-impl.zero \
-    android.hardware.bluetooth@1.0-service
+    android.hardware.bluetooth@1.0-service.m86
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/bluetooth/bt_vendor.conf:$(TARGET_COPY_OUT_SYSTEM)/etc/bluetooth/bt_vendor.conf
@@ -106,17 +124,37 @@ PRODUCT_PACKAGES += \
     android.hardware.audio@5.0-impl \
     android.hardware.audio.effect@5.0-impl \
     audio.r_submix.default \
-    audio.usb.default
+    audio.usb.default \
+    libm86omx_shim
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/audio/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml \
     $(LOCAL_PATH)/audio/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
     $(LOCAL_PATH)/audio/mixer_paths.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/mixer_paths.xml \
+    $(LOCAL_PATH)/media/media_codecs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml \
+    $(LOCAL_PATH)/media/media_profiles.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_V1_0.xml \
+    frameworks/av/media/libstagefright/data/media_codecs_google_audio.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_google_audio.xml \
+    frameworks/av/media/libstagefright/data/media_codecs_google_telephony.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_google_telephony.xml \
+    frameworks/av/media/libstagefright/data/media_codecs_google_video.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_google_video.xml \
     frameworks/av/services/audiopolicy/config/a2dp_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/a2dp_audio_policy_configuration.xml \
     frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_volumes.xml \
     frameworks/av/services/audiopolicy/config/default_volume_tables.xml:$(TARGET_COPY_OUT_VENDOR)/etc/default_volume_tables.xml \
     frameworks/av/services/audiopolicy/config/r_submix_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/r_submix_audio_policy_configuration.xml \
     frameworks/av/services/audiopolicy/config/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml
+
+# The stock Exynos OMX core queries uname while running inside media.codec.
+# Android 10's base policy does not allow it, so install the same narrow
+# device policy used by the maintained universal7420 family.
+PRODUCT_COPY_FILES += \
+    device/samsung/universal7420-common/configs/seccomp/mediacodec.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediacodec.policy \
+    device/samsung/universal7420-common/configs/seccomp/mediaextractor.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediaextractor.policy
+
+# PRO5 has no usable Keymaster blob in the final Flyme dump. Use Android's
+# software Keymaster 4 implementation so keystore can start instead of
+# aborting while probing an undeclared TEE device.
+PRODUCT_PACKAGES += \
+    android.hardware.keymaster@4.0-impl \
+    android.hardware.keymaster@4.0-service
 
 # Radio. AOSP's Android 10 rild/libril translates the legacy callback ABI to
 # HIDL radio 1.1 for both slots. It loads the hash-locked Flyme 8 libsitril.so;
@@ -133,7 +171,8 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     android.hardware.gnss@1.0 \
     android.hardware.gnss@1.0-impl.zero \
-    android.hardware.gnss@1.0-service
+    android.hardware.gnss@1.0-service \
+    libm86gps_shim
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/gps/gps.conf:$(TARGET_COPY_OUT_SYSTEM)/etc/gps.conf \
@@ -149,7 +188,8 @@ PRODUCT_PACKAGES += \
     Tag
 
 PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/nfc/libnfc-nxp.conf:$(TARGET_COPY_OUT_VENDOR)/etc/libnfc-nxp.conf
+    $(LOCAL_PATH)/nfc/libnfc-nxp.conf:$(TARGET_COPY_OUT_VENDOR)/etc/libnfc-nxp.conf \
+    hardware/nxp/nfc/halimpl/libnfc-nci.conf:$(TARGET_COPY_OUT_VENDOR)/etc/libnfc-nci.conf
 
 # Sensors. Android 10's generic HIDL bridge loads sensors.m86.so. The custom
 # service declaration adds the input group required by the Flyme ALS/PS path.
@@ -167,6 +207,15 @@ PRODUCT_PACKAGES += \
     android.hardware.camera.provider@2.4-impl \
     android.hardware.camera.provider@2.4-service \
     libm86camera_shim
+
+# USB. PRO5 has a fixed-role Micro-USB device port and no Type-C/dual-role
+# class from which Android 10 can discover the active data role. The Lineage
+# basic USB HAL reports the same immutable UFP + DEVICE + SINK port used by the
+# Galaxy S6 universal7420 tree. Without it Settings receives DATA_ROLE_NONE
+# and disables every entry in the "Use USB for" preference group even though
+# the legacy android_usb gadget can switch functions correctly.
+PRODUCT_PACKAGES += \
+    android.hardware.usb@1.0-service.basic
 
 # Vibrator. The maintained Meizu kernel exposes the standard timed-output
 # interface used by Android's source-built legacy module; the HIDL service
@@ -205,8 +254,14 @@ PRODUCT_PACKAGES += \
 # build/make/core during Ninja graph generation.
 TARGET_SYSTEM_PROP := device/meizu/m86/system.prop
 
-# Android's build logic appends adb for userdebug/eng. User builds retain MTP.
+# Match Android 10's normal USB policy: start in the logical FUNCTION_NONE
+# state, which exposes no storage until the user explicitly selects a data
+# function.  UsbDeviceManager adds ADB only while USB debugging is enabled in
+# Developer options.  Keep the synchronous FunctionFS compatibility path
+# because m86's Samsung 3.10 gadget cannot service the newer nonblocking/AIO
+# adbd transport reliably.
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
-    persist.sys.usb.config=mtp
+    ro.adb.nonblocking_ffs=false \
+    persist.sys.usb.config=none
 
 $(call inherit-product-if-exists, vendor/meizu/m86/m86-vendor.mk)

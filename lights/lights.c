@@ -19,7 +19,7 @@
 #include <log/log.h>
 
 #define BACKLIGHT_FILE \
-    "/sys/devices/13930000.decon_fb/backlight/pwm-backlight.0/brightness"
+    "/sys/class/backlight/pwm-backlight.0/brightness"
 #define INDICATOR_FILE "/sys/class/leds/m86_led/brightness"
 
 /*

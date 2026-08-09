@@ -4,6 +4,7 @@
 /dev/p61                     0660   nfc         nfc
 /dev/fpc1020                 0660   system      system
 /dev/tspdrv                  0660   system      system
+/dev/android_adb             0660   shell       shell
 
 # m86 audio DSP, Smart-PA and mixer nodes. Android 10 hosts the passthrough
 # primary HAL in audioserver, whose supplementary audio/media groups replace
