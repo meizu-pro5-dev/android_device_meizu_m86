@@ -1,0 +1,4 @@
+# The Samsung 3.10 sysfs real paths do not match AOSP's /class/rfkill labels.
+genfscon sysfs /devices/11460000.uart/bluetooth.13/rfkill/rfkill0/state u:object_r:sysfs_bluetooth_writable:s0
+genfscon sysfs /module/bcmdhd/parameters/firmware_path u:object_r:sysfs_wlan_fwpath:s0
+genfscon sysfs /devices/virtual/android_usb/android0/iSerial u:object_r:sysfs_android_usb:s0

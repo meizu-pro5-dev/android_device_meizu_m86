@@ -15,24 +15,6 @@ on fs
     mkdir /dev/bus 0755 root root
     mkdir /dev/bus/usb 0755 root root
 
-# Override Android's generic fallback identity after its action has selected
-# the adb function.  Samsung's Exynos 7420 legacy-gadget implementation
-# restarts adbd after every composition containing FunctionFS.  Doing the same
-# here makes adbd reopen ep0 and publish descriptors for the newly bound
-# gadget, instead of leaving the host attached to stale endpoints.
-on property:sys.usb.config=adb && property:sys.usb.configfs=0
-    write /sys/class/android_usb/android0/enable 0
-    write /sys/class/android_usb/android0/idVendor 2A45
-    write /sys/class/android_usb/android0/idProduct 0C02
-    write /sys/class/android_usb/android0/functions adb
-    write /sys/class/android_usb/android0/bDeviceClass 0
-    write /sys/class/android_usb/android0/bDeviceSubClass 0
-    write /sys/class/android_usb/android0/bDeviceProtocol 0
-    write /sys/class/android_usb/android0/enable 1
-    stop adbd
-    start adbd
-    setprop sys.usb.state adb
-
 on boot
     write /sys/class/android_usb/android0/iManufacturer ${ro.product.manufacturer}
     write /sys/class/android_usb/android0/iProduct ${ro.product.model}
@@ -48,8 +30,8 @@ service m86-usb-serial /system/bin/m86_usb_serial
     seclabel u:r:init:s0
 
 # /data is available here and ueventd has created the private-partition nodes.
-# Publishing the factory serial also releases the Bluetooth HAL, whose stable
-# fallback address is derived from the same per-handset identity.
+# Publishing the factory serial is a USB identity event. Other subsystems may
+# consume the published identity, but this action owns no foreign service.
 on post-fs-data
     # Android 10 adbd otherwise selects the newer nonblocking/AIO FunctionFS
     # path, which this Samsung 3.10 gadget stack does not implement reliably.
@@ -62,7 +44,6 @@ on property:vendor.m86.identity.ready=1
     # inherits requests or endpoint state from the pre-serial connection.
     stop adbd
     start adbd
-    start vendor.bluetooth-1-0
 
 on post-fs-data
     chown system system /sys/class/android_usb/android0/f_mass_storage/lun/file

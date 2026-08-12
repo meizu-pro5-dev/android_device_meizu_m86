@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <SwitchPreference
+        android:key="mback_navigation"
+        android:persistent="false"
+        android:title="@string/mback_navigation_title"
+        android:summary="@string/mback_navigation_summary" />
+    <ListPreference
+        android:key="mback_tap"
+        android:persistent="false"
+        android:title="@string/mback_tap_title"
+        android:entries="@array/mback_action_entries"
+        android:entryValues="@array/mback_action_values" />
+    <ListPreference
+        android:key="mback_double_tap"
+        android:persistent="false"
+        android:title="@string/mback_double_tap_title"
+        android:entries="@array/mback_action_entries"
+        android:entryValues="@array/mback_action_values" />
+    <ListPreference
+        android:key="mback_swipe_left"
+        android:persistent="false"
+        android:title="@string/mback_swipe_left_title"
+        android:entries="@array/mback_action_entries"
+        android:entryValues="@array/mback_action_values" />
+    <ListPreference
+        android:key="mback_swipe_right"
+        android:persistent="false"
+        android:title="@string/mback_swipe_right_title"
+        android:entries="@array/mback_action_entries"
+        android:entryValues="@array/mback_action_values" />
+    <PreferenceCategory android:title="@string/mback_feedback_category">
+        <SwitchPreference
+            android:key="mback_sound"
+            android:persistent="false"
+            android:title="@string/mback_sound_title" />
+        <ListPreference
+            android:key="mback_haptic"
+            android:persistent="false"
+            android:title="@string/mback_haptic_title"
+            android:entries="@array/mback_haptic_entries"
+            android:entryValues="@array/mback_haptic_values" />
+    </PreferenceCategory>
+</PreferenceScreen>

@@ -2,6 +2,10 @@
 # Copyright (C) 2026 The LineageOS Project
 # SPDX-License-Identifier: Apache-2.0
 
+# Default builds expose navigation only. The separate experiment product sets
+# this before inheriting the base product, selecting its TEE kernel/DTB pair.
+M86_ENABLE_FINGERPRINT_EXPERIMENT ?= false
+
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base_telephony.mk)
 

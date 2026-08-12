@@ -1,0 +1,7 @@
+# M86 radio lifecycle fragment. The platform rild service is defined by the
+# Android 10 radio module; this fragment owns only the device reset trigger.
+
+on property:sys.rild_reset=1
+    stop ril-daemon
+    setprop sys.rild_reset 0
+    start ril-daemon

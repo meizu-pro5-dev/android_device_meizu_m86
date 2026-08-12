@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">M86 设置</string>
+    <string name="mback_title">mBack</string>
+    <string name="mback_summary">配置 PRO 5 指纹按键导航手势</string>
+    <string name="mback_navigation_title">使用 mBack 导航</string>
+    <string name="mback_navigation_summary">隐藏屏幕导航栏并启用 mBack 动作</string>
+    <string name="mback_tap_title">轻触操作</string>
+    <string name="mback_double_tap_title">双击操作</string>
+    <string name="mback_swipe_left_title">向左滑动操作</string>
+    <string name="mback_swipe_right_title">向右滑动操作</string>
+    <string name="mback_feedback_category">反馈</string>
+    <string name="mback_sound_title">触摸音</string>
+    <string name="mback_haptic_title">振动强度</string>
+    <string name="action_nothing">无操作</string>
+    <string name="action_menu">菜单</string>
+    <string name="action_recents">最近任务</string>
+    <string name="action_assist">助手</string>
+    <string name="action_voice_assist">语音助手</string>
+    <string name="action_search">应用内搜索</string>
+    <string name="action_camera">相机</string>
+    <string name="action_sleep">休眠</string>
+    <string name="action_last_app">上一个应用</string>
+    <string name="action_split_screen">分屏</string>
+    <string name="action_home">主屏幕</string>
+    <string name="action_back">返回</string>
+    <string name="haptic_off">关闭</string>
+    <string name="haptic_light">轻</string>
+    <string name="haptic_medium">中</string>
+    <string name="haptic_strong">强</string>
+    <string name="hifi_title">HiFi 音效</string>
+    <string name="hifi_summary">配置 PRO 5 的 ES9018 耳机 DAC</string>
+    <string name="hifi_enable_title">启用 HiFi 音频</string>
+    <string name="hifi_enable_summary_on">使用 ES9018 输出有线媒体音频</string>
+    <string name="hifi_enable_summary_off">使用标准编解码器输出有线音频</string>
+    <string name="hifi_gain_title">增益模式</string>
+    <string-array name="hifi_gain_entries">
+        <item>自动</item>
+        <item>低增益</item>
+        <item>高增益</item>
+        <item>线路输出</item>
+    </string-array>
+    <string name="hifi_line_out_warning_title">启用线路输出？</string>
+    <string name="hifi_line_out_warning_message">线路输出模式连接耳机时音量可能极高。继续前请降低下游放大器音量。</string>
+</resources>

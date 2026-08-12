@@ -1,0 +1,9 @@
+# Keep every FPC gesture distinct until the m86 DeviceKeyHandler applies the
+# user-selected mBack action. Slow and quick swipes collapse by direction.
+# On the raw AP backend, KEY_BACK is scan 158, KEY_F20 is scan 190 and
+# KEY_F21 is scan 191. The Android F9/F11/F12 aliases keep those inputs out of
+# the normal Back/Menu path until the device-key handler consumes them.
+key 158   F9                VIRTUAL
+key 139   F10               VIRTUAL
+key 190   F11               VIRTUAL
+key 191   F12               VIRTUAL

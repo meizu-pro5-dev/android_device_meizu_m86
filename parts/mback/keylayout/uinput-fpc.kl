@@ -1,0 +1,3 @@
+# Flyme's optional FPC HAL emits Linux BTN_EAST (305) through "uinput-fpc".
+# The kernel-owned fpc1020 path remains the primary daemon-independent input.
+key 305   F9                VIRTUAL

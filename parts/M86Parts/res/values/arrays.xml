@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="mback_action_entries">
+        <item>@string/action_nothing</item>
+        <item>@string/action_menu</item>
+        <item>@string/action_recents</item>
+        <item>@string/action_assist</item>
+        <item>@string/action_voice_assist</item>
+        <item>@string/action_search</item>
+        <item>@string/action_camera</item>
+        <item>@string/action_sleep</item>
+        <item>@string/action_last_app</item>
+        <item>@string/action_split_screen</item>
+        <item>@string/action_home</item>
+        <item>@string/action_back</item>
+    </string-array>
+    <string-array name="mback_action_values" translatable="false">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+        <item>8</item>
+        <item>9</item>
+        <item>10</item>
+        <item>11</item>
+    </string-array>
+    <string-array name="mback_haptic_entries">
+        <item>@string/haptic_off</item>
+        <item>@string/haptic_light</item>
+        <item>@string/haptic_medium</item>
+        <item>@string/haptic_strong</item>
+    </string-array>
+    <string-array name="mback_haptic_values" translatable="false">
+        <item>0</item>
+        <item>10</item>
+        <item>20</item>
+        <item>30</item>
+    </string-array>
+    <string-array name="hifi_gain_values" translatable="false">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+</resources>

@@ -1,0 +1,18 @@
+# Copyright (C) 2026 The LineageOS Project
+# SPDX-License-Identifier: Apache-2.0
+
+# PhoneWindowManager loads this class by name and invokes its public Context
+# constructor. Keep only that reflective contract and the interface entrypoint;
+# private implementation details remain shrinkable and optimizable.
+-keep,allowoptimization public final class org.lineageos.settings.m86.mback.KeyHandler {
+    public <init>(android.content.Context);
+    public android.view.KeyEvent handleKeyEvent(android.view.KeyEvent);
+}
+
+# Settings launches these two device-owned components by manifest class name.
+-keep,allowoptimization public final class org.lineageos.settings.m86.hifi.HifiSettingsActivity {
+    public <init>();
+}
+-keep,allowoptimization public final class org.lineageos.settings.m86.hifi.HifiSettingsFragment {
+    public <init>();
+}

@@ -1,0 +1,10 @@
+# Installed only by lineage_m86_nfc_experiment.
+
+on post-fs-data
+    mkdir /data/nfc 0770 nfc nfc
+    mkdir /data/nfc/param 0770 nfc nfc
+    mkdir /data/vendor/nfc 0770 nfc nfc
+    chown nfc nfc /dev/pn544
+    chmod 0660 /dev/pn544
+    chown nfc nfc /dev/p61
+    chmod 0660 /dev/p61

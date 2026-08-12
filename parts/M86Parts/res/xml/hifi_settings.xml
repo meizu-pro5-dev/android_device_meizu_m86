@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <SwitchPreference
+        android:key="hifi_music_enabled"
+        android:persistent="false"
+        android:title="@string/hifi_enable_title"
+        android:summaryOn="@string/hifi_enable_summary_on"
+        android:summaryOff="@string/hifi_enable_summary_off" />
+    <ListPreference
+        android:key="hifi_music_param"
+        android:persistent="false"
+        android:title="@string/hifi_gain_title"
+        android:entries="@array/hifi_gain_entries"
+        android:entryValues="@array/hifi_gain_values" />
+</PreferenceScreen>

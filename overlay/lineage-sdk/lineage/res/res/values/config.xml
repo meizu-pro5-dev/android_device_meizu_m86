@@ -4,4 +4,14 @@
          dedicated mBack category and must not masquerade as fixed keys. -->
     <integer name="config_deviceHardwareKeys">65</integer>
     <integer name="config_deviceHardwareWakeKeys">65</integer>
+
+    <!-- Load the m86-only mBack policy through Lineage's existing device-key
+         extension point. External F9-F12 keyboards remain untouched because
+         the handler validates both input identity and Linux scan code. -->
+    <string-array name="config_deviceKeyHandlerLibs" translatable="false">
+        <item>/system/priv-app/M86Parts/M86Parts.apk</item>
+    </string-array>
+    <string-array name="config_deviceKeyHandlerClasses" translatable="false">
+        <item>org.lineageos.settings.m86.mback.KeyHandler</item>
+    </string-array>
 </resources>

@@ -3,11 +3,6 @@ ro.product.board=m86
 ro.board.platform=exynos5
 ro.chipname=exynos7420
 
-# Keep the navigation bar as a fallback while exposing the independently
-# configurable FPC mBack gestures in LineageOS' official Buttons settings.
-qemu.hw.mainkeys=0
-ro.meizu.hardware.mback=true
-
 # Display
 ro.opengles.version=196610
 ro.sf.lcd_density=480
@@ -46,15 +41,6 @@ ro.sys.isolated_storage=false
 # 3.10 f_fs implementation which predates that support.  Keep the descriptor
 # readiness handshake but use synchronous endpoint reads and writes.
 sys.usb.ffs.aio_compat=1
-
-# Wi-Fi
-wifi.interface=wlan0
-wifi.direct.interface=p2p-dev-wlan0
-
-# NFC. These identify the final Flyme PN65T/PN547 I2C design; the open NXP
-# Android 10 HAL takes the concrete device and firmware names from its config.
-ro.nfc.platform=nxppn547
-ro.nfc.port=I2C
 
 # Radio. These values are taken from the final Flyme 8.0.5.0A system image.
 # The Android 10 rild is 64-bit and loads the latest m86 SITRIL directly.

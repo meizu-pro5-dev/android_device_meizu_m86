@@ -32,8 +32,6 @@
     "/sys/module/exynos_march_cpu_hotplug/parameters/cl1_booster"
 #define HOTPLUG_BIG_MINIMUM \
     "/sys/module/exynos_march_cpu_hotplug/parameters/min_cpu_boosted"
-#define NAVIGATION_SWITCH "/proc/nav_switch"
-
 #define PROFILE_BALANCED "1"
 #define PROFILE_ECO "2"
 #define BOOST_DURATION_US "400000"
@@ -86,7 +84,7 @@ static void m86_power_init(struct power_module *module) {
 
 static void m86_set_interactive(struct power_module *module, int on) {
   (void)module;
-  write_node(NAVIGATION_SWITCH, on ? "1" : "0");
+  (void)on;
 }
 
 static void m86_set_low_power(struct m86_power_module *m86, bool enabled) {

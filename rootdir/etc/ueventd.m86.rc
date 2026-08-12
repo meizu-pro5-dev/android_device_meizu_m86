@@ -1,10 +1,12 @@
 /dev/ttySAC1                 0660   gps         system
 /dev/ttySAC4                 0660   bluetooth   bluetooth
-/dev/pn544                   0660   nfc         nfc
-/dev/p61                     0660   nfc         nfc
-/dev/fpc1020                 0660   system      system
 /dev/tspdrv                  0660   system      system
 /dev/android_adb             0660   shell       shell
+
+# Broadcom connectivity. ueventd owns DAC changes for dynamic kernel nodes;
+# init must not chmod/chown sysfs and therefore needs no broad setattr allow.
+/sys/devices/11460000.uart/bluetooth.13/rfkill/rfkill0 state 0660 bluetooth bluetooth
+/sys/module/bcmdhd/parameters firmware_path 0660 wifi wifi
 
 # m86 audio DSP, Smart-PA and mixer nodes. Android 10 hosts the passthrough
 # primary HAL in audioserver, whose supplementary audio/media groups replace

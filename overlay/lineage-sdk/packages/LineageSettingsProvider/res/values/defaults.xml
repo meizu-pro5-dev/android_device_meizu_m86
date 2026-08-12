@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Default to the safe Android navigation path until the user enables mBack. -->
+    <integer name="def_force_show_navbar">1</integer>
+</resources>

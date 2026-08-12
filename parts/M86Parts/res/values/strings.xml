@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">M86Parts</string>
+    <string name="mback_title">mBack</string>
+    <string name="mback_summary">Configure the PRO 5 fingerprint-button navigation gestures</string>
+    <string name="mback_navigation_title">Use mBack navigation</string>
+    <string name="mback_navigation_summary">Hide the on-screen navigation bar and enable mBack actions</string>
+    <string name="mback_tap_title">Tap action</string>
+    <string name="mback_double_tap_title">Double-tap action</string>
+    <string name="mback_swipe_left_title">Swipe-left action</string>
+    <string name="mback_swipe_right_title">Swipe-right action</string>
+    <string name="mback_feedback_category">Feedback</string>
+    <string name="mback_sound_title">Touch sound</string>
+    <string name="mback_haptic_title">Vibration strength</string>
+    <string name="action_nothing">No action</string>
+    <string name="action_menu">Menu</string>
+    <string name="action_recents">Recents</string>
+    <string name="action_assist">Assistant</string>
+    <string name="action_voice_assist">Voice assistant</string>
+    <string name="action_search">In-app search</string>
+    <string name="action_camera">Camera</string>
+    <string name="action_sleep">Sleep</string>
+    <string name="action_last_app">Last app</string>
+    <string name="action_split_screen">Split screen</string>
+    <string name="action_home">Home</string>
+    <string name="action_back">Back</string>
+    <string name="haptic_off">Off</string>
+    <string name="haptic_light">Light</string>
+    <string name="haptic_medium">Medium</string>
+    <string name="haptic_strong">Strong</string>
+    <string name="hifi_title">HiFi sound</string>
+    <string name="hifi_summary">Configure the PRO 5 ES9018 headphone DAC</string>
+    <string name="hifi_enable_title">Use HiFi audio</string>
+    <string name="hifi_enable_summary_on">Use ES9018 for wired media audio</string>
+    <string name="hifi_enable_summary_off">Use the standard codec for wired audio</string>
+    <string name="hifi_gain_title">Gain mode</string>
+    <string-array name="hifi_gain_entries">
+        <item>Automatic</item>
+        <item>Low gain</item>
+        <item>High gain</item>
+        <item>Line out</item>
+    </string-array>
+    <string name="hifi_line_out_warning_title">Enable line out?</string>
+    <string name="hifi_line_out_warning_message">Line-out mode can be extremely loud with headphones connected. Lower the downstream amplifier volume before continuing.</string>
+</resources>

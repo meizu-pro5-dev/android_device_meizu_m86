@@ -1,0 +1,3 @@
+path	sha256	elf	status
+lib/hw/audio.primary.m86.so	50e97ee55ac9408ecb0017e3dc0c0541e520e102cea0b8ec87682e51c6cadeac	ELF32 ARM	active locked input; private-wrapper handoff pending
+lib64/hw/audio.primary.m86.so	c7c69dd92097c4e6ba1df2d76112912ef12c610d814d0bf2b6b26f2a26169aba	ELF64 AArch64	no standard consumer; removal gated on target-files proof

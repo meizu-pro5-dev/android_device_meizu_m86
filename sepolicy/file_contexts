@@ -1,3 +1,9 @@
 # Empty root-image mountpoints for the read-only Meizu auxiliary partitions.
 /custom    u:object_r:rootfs:s0
 /mnv       u:object_r:rootfs:s0
+
+# m86 Bluetooth owns one 32-bit service and the controller UART. This is a
+# non-Treble device, so /vendor resolves to /system/vendor at runtime; cover
+# both spellings exactly as the platform Bluetooth service rule does.
+/(vendor|system/vendor)/bin/hw/android\.hardware\.bluetooth@1\.0-service\.m86  u:object_r:hal_bluetooth_default_exec:s0
+/dev/ttySAC4                                                                   u:object_r:hci_attach_dev:s0

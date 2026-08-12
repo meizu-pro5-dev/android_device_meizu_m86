@@ -1,6 +1,7 @@
 # Imported from the final cm-14.1 m86 tree at commit
 # 26c45279376f4a55dcef8f32a3640f522012df0a, then reconciled against the
 # verified Flyme 8.0.5.0A system image (UUID da594c53-9beb-f85c-85c5-cedf76546f7a).
+app/020a0000000000000000000000000000.drbin
 app/mcRegistry/04010000000000000000000000000000.tlbin
 app/mcRegistry/04020000000000000000000000000000.tlbin
 app/mcRegistry/07020000000000000000000000000000.tlbin
@@ -67,6 +68,8 @@ lib/hw/dis_effect.m86.so
 lib/hw/gralloc.exynos5.so
 lib/hw/hwcomposer.exynos5.so
 lib/hw/memtrack.exynos5.so
+lib64/hw/fingerprint.m86.so
+lib64/lib_fpc_tac_shared.so
 lib/libExynosHWCService.so
 lib/libExynosOMX_Core.so
 lib/libExynosOMX_Resourcemanager.so

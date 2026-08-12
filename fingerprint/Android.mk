@@ -4,6 +4,12 @@
 
 LOCAL_PATH := $(call my-dir)
 
+# The production build uses Flyme 8's Trustonic HAL.  Keep the historical
+# raw-frame/libfprint module available only for explicit recovery experiments;
+# defining it in normal builds can leave a higher-priority /vendor HAL in an
+# incremental PRODUCT_OUT and shadow the secure /system implementation.
+ifeq ($(M86_ENABLE_LEGACY_RAW_FINGERPRINT),true)
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := libm86fprint
 LOCAL_VENDOR_MODULE := true
@@ -78,3 +84,5 @@ LOCAL_CFLAGS := \
     -Wextra \
     -Werror
 include $(BUILD_SHARED_LIBRARY)
+
+endif

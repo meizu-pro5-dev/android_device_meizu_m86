@@ -1,0 +1,24 @@
+# Installed only by lineage_m86_fingerprint_experiment.
+
+on init
+    export MC_AUTH_TOKEN_PATH /data/misc/mcRegistry
+
+on post-fs-data
+    mkdir /data/misc/mcRegistry 0770 system system
+    mkdir /data/fpc 0770 system system
+    chown system system /dev/mobicore
+    chmod 0600 /dev/mobicore
+    chown system system /dev/mobicore-user
+    chmod 0660 /dev/mobicore-user
+    chown system system /dev/fpc1020
+    chmod 0660 /dev/fpc1020
+    start mobicore
+
+service mobicore /system/bin/mcDriverDaemon \
+    -r /system/app/020a0000000000000000000000000000.drbin \
+    -r /system/app/mcRegistry/04020000000000000000000000000000.tlbin \
+    -r /system/app/mcRegistry/07020000000000000000000000000000.tlbin
+    class core
+    user system
+    group system
+    disabled
