@@ -8,6 +8,17 @@ LOCAL_FINGERPRINT_EXPERIMENT_PATH := device/meizu/m86
 PRODUCT_PACKAGES += \
     android.hardware.biometrics.fingerprint@2.1-service
 
+# gatekeeperd on Android 10 obtains the gatekeeper through the
+# android.hardware.gatekeeper@1.0 HIDL interface, not through a direct
+# hw_get_module_by_class lookup. Without this passthrough service it silently
+# falls back to SoftGateKeeperDevice and the Trustonic gatekeeper HAL is never
+# loaded, so the 0401 matcher TA never sees a TEE-signed hw_auth_token. The
+# passthrough implementation opens the legacy HAL class, which resolves to
+# gatekeeper.m86.so (the renamed stock gatekeeper.exynos7420.so).
+PRODUCT_PACKAGES += \
+    android.hardware.gatekeeper@1.0-service \
+    android.hardware.gatekeeper@1.0-impl
+
 # The stock Flyme HAL stubs enumerate(), so FingerprintService's internal
 # template cleanup would never complete and would block every client; the
 # experiment overlay disables config_cleanupUnusedFingerprints.
