@@ -68,6 +68,8 @@ lib/hw/dis_effect.m86.so
 lib/hw/gralloc.exynos5.so
 lib/hw/hwcomposer.exynos5.so
 lib/hw/memtrack.exynos5.so
+lib/hw/gatekeeper.exynos7420.so
+lib64/hw/gatekeeper.exynos7420.so
 lib64/hw/fingerprint.m86.so
 lib64/lib_fpc_tac_shared.so
 lib/libExynosHWCService.so
