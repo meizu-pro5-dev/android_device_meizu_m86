@@ -60,7 +60,10 @@ on boot
     chown system system /sys/class/timed_output/vibrator/enable
     chmod 0660 /sys/class/timed_output/vibrator/enable
     chown system system /sys/bus/spi/devices/spi4.0/irq
-    chmod 0440 /sys/bus/spi/devices/spi4.0/irq
+    # Flyme's HAL ran as root, so the stock 0440 was only readable for
+    # system; the LineageOS HAL runs as system and acks the node by writing
+    # it, so it needs group write like the other FPC sysfs files.
+    chmod 0660 /sys/bus/spi/devices/spi4.0/irq
     chown system system /sys/bus/spi/devices/spi4.0/wakeup_enable
     chmod 0660 /sys/bus/spi/devices/spi4.0/wakeup_enable
     chown system system /sys/bus/spi/devices/spi4.0/clk_enable
