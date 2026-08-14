@@ -1,0 +1,3 @@
+# Data written by the NXP HAL below /data/vendor/nfc. Do not attach
+# core_data_file_type: Treble requires data/vendor paths to remain vendor-owned.
+type m86_nfc_vendor_data_file, file_type, data_file_type;

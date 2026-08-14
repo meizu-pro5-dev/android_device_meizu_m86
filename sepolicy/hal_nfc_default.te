@@ -1,0 +1,5 @@
+# The NXP reader/HCE HAL persists its configuration state below /data/vendor/nfc.
+# This device-owned type intentionally has no core_data_file_type attribute;
+# Android 10 Treble policy forbids a core data type under /data/vendor.
+allow hal_nfc_default m86_nfc_vendor_data_file:dir rw_dir_perms;
+allow hal_nfc_default m86_nfc_vendor_data_file:file create_file_perms;

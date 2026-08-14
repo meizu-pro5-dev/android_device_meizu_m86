@@ -4,7 +4,7 @@ on post-fs-data
     mkdir /data/nfc 0770 nfc nfc
     mkdir /data/nfc/param 0770 nfc nfc
     mkdir /data/vendor/nfc 0770 nfc nfc
+    restorecon_recursive /data/nfc
+    restorecon_recursive /data/vendor/nfc
     chown nfc nfc /dev/pn544
     chmod 0660 /dev/pn544
-    chown nfc nfc /dev/p61
-    chmod 0660 /dev/p61
