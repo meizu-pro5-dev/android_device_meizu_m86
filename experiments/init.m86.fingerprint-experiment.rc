@@ -6,6 +6,10 @@ on init
 on post-fs-data
     mkdir /data/misc/mcRegistry 0770 system system
     mkdir /data/fpc 0770 system system
+    # Trustonic TbStorage files are created under /data/misc/mcRegistry by the
+    # driver and default to root ownership. The TAs (matcher 0401, STH 070610)
+    # re-open them from the system-uid HAL, so keep the whole tree system-owned.
+    chown -R system system /data/misc/mcRegistry
     chown system system /dev/mobicore
     chmod 0600 /dev/mobicore
     chown system system /dev/mobicore-user
