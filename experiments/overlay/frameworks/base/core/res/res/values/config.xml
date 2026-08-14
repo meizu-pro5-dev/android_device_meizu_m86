@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- The stock Flyme fingerprint HAL stubs enumerate() (fpc_enumerate is
+         an 8-byte "return 0" with no notify callbacks), so FingerprintService's
+         internal template-cleanup client never receives the terminating
+         enumeration message and stays current forever. Every subsequent
+         enroll/authenticate client is then parked as pending and the sensor
+         never starts. The Flyme HAL manages its own template database, so
+         disable the framework-side HAL sync. -->
+    <bool name="config_cleanupUnusedFingerprints">false</bool>
+</resources>
