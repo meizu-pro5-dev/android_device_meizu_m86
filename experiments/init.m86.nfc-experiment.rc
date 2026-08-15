@@ -1,4 +1,4 @@
-# Installed only by lineage_m86_nfc_experiment.
+# Installed whenever the maintained PN547 reader/HCE path is enabled.
 
 on post-fs-data
     mkdir /data/nfc 0770 nfc nfc

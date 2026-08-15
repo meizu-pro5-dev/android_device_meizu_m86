@@ -1,4 +1,4 @@
-# Installed only by lineage_m86_fingerprint_experiment.
+# Installed whenever the maintained Trustonic FPC path is enabled.
 
 on init
     export MC_AUTH_TOKEN_PATH /data/misc/mcRegistry

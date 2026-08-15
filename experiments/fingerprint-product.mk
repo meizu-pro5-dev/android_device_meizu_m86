@@ -3,10 +3,12 @@
 
 LOCAL_FINGERPRINT_EXPERIMENT_PATH := device/meizu/m86
 
-# This experiment selects only Flyme's production Trustonic chain. The raw
-# libfprint recovery implementation remains disabled and mutually exclusive.
+# This experiment selects Flyme's production Trustonic chain through an AOSP
+# callback-table compatibility HAL. The raw libfprint recovery implementation
+# remains disabled and mutually exclusive.
 PRODUCT_PACKAGES += \
-    android.hardware.biometrics.fingerprint@2.1-service
+    android.hardware.biometrics.fingerprint@2.1-service \
+    fingerprint.m86
 
 # gatekeeperd on Android 10 obtains the gatekeeper through the
 # android.hardware.gatekeeper@1.0 HIDL interface, not through a direct
@@ -14,9 +16,11 @@ PRODUCT_PACKAGES += \
 # falls back to SoftGateKeeperDevice and the Trustonic gatekeeper HAL is never
 # loaded, so the 0401 matcher TA never sees a TEE-signed hw_auth_token. The
 # passthrough implementation opens the legacy HAL class, which resolves to
-# gatekeeper.m86.so (the renamed stock gatekeeper.exynos7420.so).
+# gatekeeper.m86.so (the renamed stock gatekeeper.exynos7420.so). Flyme's HAL
+# also writes relative retry-record paths, so the m86 service enters
+# /data/misc/gatekeeper before loading it.
 PRODUCT_PACKAGES += \
-    android.hardware.gatekeeper@1.0-service \
+    m86_gatekeeper_service \
     android.hardware.gatekeeper@1.0-impl
 
 # The stock Flyme HAL stubs enumerate(), so FingerprintService's internal

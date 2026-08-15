@@ -13,3 +13,8 @@
 # Keep secure-element /dev/p61 handling out of the reader/HCE experiment.
 /data/nfc(/.*)?                                                               u:object_r:nfc_data_file:s0
 /data/vendor/nfc(/.*)?                                                        u:object_r:m86_nfc_vendor_data_file:s0
+
+# The m86 Gatekeeper wrapper retains the platform Gatekeeper HAL domain while
+# using a unique output path, so the generic and device services cannot both
+# own the same installed file.
+/(vendor|system/vendor)/bin/hw/android\.hardware\.gatekeeper@1\.0-service\.m86  u:object_r:hal_gatekeeper_default_exec:s0

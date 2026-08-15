@@ -4,10 +4,34 @@
 
 LOCAL_PATH := $(call my-dir)
 
-# The production build uses Flyme 8's Trustonic HAL.  Keep the historical
-# raw-frame/libfprint module available only for explicit recovery experiments;
-# defining it in normal builds can leave a higher-priority /vendor HAL in an
-# incremental PRODUCT_OUT and shadow the secure /system implementation.
+# The secure experiment loads Flyme 8's Trustonic HAL through a small ABI
+# compatibility module. Flyme inserted four callbacks into fingerprint_device_t
+# and its set_active_group is therefore 0x20 later than Android's standard ABI.
+ifeq ($(M86_ENABLE_FINGERPRINT_EXPERIMENT),true)
+ifneq ($(M86_ENABLE_LEGACY_RAW_FINGERPRINT),true)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := fingerprint.m86
+LOCAL_MODULE_RELATIVE_PATH := hw
+LOCAL_MULTILIB := 64
+LOCAL_SRC_FILES := FingerprintCompat.c
+LOCAL_SHARED_LIBRARIES := \
+    libdl \
+    liblog
+LOCAL_CFLAGS := \
+    -std=gnu11 \
+    -Wall \
+    -Wextra \
+    -Werror
+include $(BUILD_SHARED_LIBRARY)
+
+endif
+endif
+
+# Keep the historical raw-frame/libfprint module available only for explicit
+# recovery experiments; defining it in normal builds can leave a
+# higher-priority /vendor HAL in an incremental PRODUCT_OUT and shadow the
+# secure /system implementation.
 ifeq ($(M86_ENABLE_LEGACY_RAW_FINGERPRINT),true)
 
 include $(CLEAR_VARS)

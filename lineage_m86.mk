@@ -2,14 +2,25 @@
 # Copyright (C) 2026 The LineageOS Project
 # SPDX-License-Identifier: Apache-2.0
 
-# Default builds expose navigation only. The separate experiment product sets
-# this before inheriting the base product, selecting its TEE kernel/DTB pair.
-M86_ENABLE_FINGERPRINT_EXPERIMENT ?= false
+# The maintained product now carries the two device-validated hardware paths:
+# the PN547 reader/HCE stack and Flyme's Trustonic-backed FPC implementation.
+# The single-domain products below remain available as rollback probes and set
+# one of these flags false before inheriting this product definition.
+M86_ENABLE_NFC_EXPERIMENT ?= true
+M86_ENABLE_FINGERPRINT_EXPERIMENT ?= true
 
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base_telephony.mk)
 
 $(call inherit-product, device/meizu/m86/device.mk)
+
+ifeq ($(M86_ENABLE_NFC_EXPERIMENT),true)
+$(call inherit-product, device/meizu/m86/experiments/nfc-product.mk)
+endif
+
+ifeq ($(M86_ENABLE_FINGERPRINT_EXPERIMENT),true)
+$(call inherit-product, device/meizu/m86/experiments/fingerprint-product.mk)
+endif
 
 # Let Lineage common keep authenticated ADB disabled by default. Developer
 # options enable it dynamically without changing the default USB data policy.

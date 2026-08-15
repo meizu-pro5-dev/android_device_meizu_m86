@@ -1,0 +1,4 @@
+# Flyme's legacy Gatekeeper HAL stores retry records as relative *.rec files.
+# The m86 HIDL service enters /data/misc/gatekeeper before loading the HAL.
+allow hal_gatekeeper_default gatekeeper_data_file:dir rw_dir_perms;
+allow hal_gatekeeper_default gatekeeper_data_file:file create_file_perms;

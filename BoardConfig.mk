@@ -74,6 +74,8 @@ BOARD_CHARGER_ENABLE_SUSPEND := true
 TARGET_KERNEL_ARCH := arm64
 TARGET_KERNEL_HEADER_ARCH := arm64
 TARGET_KERNEL_SOURCE := kernel/meizu/m86
+# The integrated/default product and the fingerprint-only rollback product use
+# the secure-world FPC path. The NFC-only rollback retains raw navigation.
 ifeq ($(M86_ENABLE_FINGERPRINT_EXPERIMENT),true)
 TARGET_KERNEL_CONFIG := cm_pro5_fingerprint_experiment_defconfig
 M86_FPC_BACKEND := tee
