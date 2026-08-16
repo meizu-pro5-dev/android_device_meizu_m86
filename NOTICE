@@ -1,0 +1,20 @@
+Meizu PRO 5 (m86) device tree for LineageOS 17.1
+Copyright (C) 2026 404698-FDU
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use these files except in compliance with the License. You may obtain a copy
+of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations
+under the License.
+
+This tree follows the public AOSP/LineageOS device configuration interfaces.
+`audio/firmware/stage1.txt` and `stage2.txt` are small tuning tables
+extracted from the Meizu Flyme 8.0.5.0A production base; see
+`audio/firmware/README.md`. No proprietary binaries are stored in this
+repository.
