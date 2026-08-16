@@ -24,21 +24,9 @@ TARGET_LD_SHIM_LIBS := \
     /system/lib/libexynoscamera.so|/system/lib/libm86camera_shim.so \
     /system/bin/gpsd|/system/lib64/libm86gps_shim.so
 
-# Flyme's 32-bit Exynos OMX components use the pre-O GraphicBufferMapper
-# four-argument lock ABI. Android 10 kept the operation but extended its C++
-# signature with stride outputs, so inject the compatibility symbol into each
-# legacy component when it is loaded by media.codec.
-TARGET_LD_SHIM_LIBS += \
-    /system/lib/omx/libOMX.Exynos.AVC.Decoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.AVC.Encoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.HEVC.Decoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.HEVC.Encoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.MPEG4.Decoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.MPEG4.Encoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.VP8.Decoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.VP8.Encoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.VP9.Decoder.so|/system/lib/libm86omx_shim.so \
-    /system/lib/omx/libOMX.Exynos.WMV.Decoder.so|/system/lib/libm86omx_shim.so
+# Codec ownership moved from the Flyme OMX blobs to the source-built
+# Exynos OpenMAX components. Those components use Android 10's native
+# ANB/DMA-BUF output path and do not need a GraphicBufferMapper lock shim.
 # Flyme gpsd predates Q and still uses legacy linker greylist/APEX behavior.
 # Scope the compatibility level to this one audited executable.
 TARGET_PROCESS_SDK_VERSION_OVERRIDE := /system/bin/gpsd=27

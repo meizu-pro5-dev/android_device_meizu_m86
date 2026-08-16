@@ -91,9 +91,9 @@ $(call inherit-product, $(LOCAL_PATH)/radio/product.mk)
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/bluetooth/bt_vendor.conf:$(TARGET_COPY_OUT_SYSTEM)/etc/bluetooth/bt_vendor.conf
 
-# Media remains independent from the normal-audio ABI boundary.
-PRODUCT_PACKAGES += \
-    libm86omx_shim
+# Media is source-owned from the Exynos OpenMAX stack. The m86 fragment only
+# selects the codec modules; it does not modify the unmodified Samsung source.
+$(call inherit-product, hardware/meizu/m86/media/product.mk)
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/media/media_codecs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml \
