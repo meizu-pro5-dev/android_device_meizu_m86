@@ -147,11 +147,12 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/sensors/android.hardware.sensors@1.0-service.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/android.hardware.sensors@1.0-service.rc
 
 # Camera. Android 10's 32-bit provider loads the exact final-Flyme m86 HAL.
+# The m86-owned service keeps libbinder on /dev/binder for the legacy HAL;
 # libm86camera_shim supplies only the audited legacy ABI delta and pulls the
 # SensorManager implementation out of its post-Nougat libsensor home.
 PRODUCT_PACKAGES += \
     android.hardware.camera.provider@2.4-impl \
-    android.hardware.camera.provider@2.4-service \
+    android.hardware.camera.provider@2.4-service.m86 \
     libm86camera_shim
 
 # Vibrator. The maintained Meizu kernel exposes the standard timed-output

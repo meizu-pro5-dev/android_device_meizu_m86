@@ -69,8 +69,3 @@ BOARD_USES_SKIA_FIMGAPI := true
 BOARD_USES_FIMGAPI_V5X := true
 BOARD_USES_DEFAULT_CSC_HW_SCALER := true
 BOARD_USES_SCALER_M2M1SHOT := true
-
-# Temporary A10 compatibility route. It only lets the unmodified common tree
-# expose the legacy Bluetooth implementation and is removed with M4. No value
-# in this file is inherited from the Samsung BoardConfig.
-TARGET_DEVICE_IS_M86 := true
