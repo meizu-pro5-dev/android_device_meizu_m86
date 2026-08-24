@@ -6,9 +6,6 @@
     <string name="mback_navigation_title">Use mBack navigation</string>
     <string name="mback_navigation_summary">Hide the on-screen navigation bar and enable mBack actions</string>
     <string name="mback_tap_title">Tap action</string>
-    <string name="mback_double_tap_title">Double-tap action</string>
-    <string name="mback_swipe_left_title">Swipe-left action</string>
-    <string name="mback_swipe_right_title">Swipe-right action</string>
     <string name="mback_feedback_category">Feedback</string>
     <string name="mback_sound_title">Touch sound</string>
     <string name="mback_haptic_title">Vibration strength</string>

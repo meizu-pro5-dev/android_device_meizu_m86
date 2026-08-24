@@ -8,10 +8,10 @@ LOCAL_PATH := device/meizu/m86
 # the Broadcom AP interface so Settings and Tethering expose Wi-Fi hotspot.
 PRODUCT_PACKAGE_OVERLAYS += $(LOCAL_PATH)/overlay
 
-# PRO 5 launched on Android 5.1. This keeps Android 10 compatibility checks in
-# legacy, non-Treble mode while the stock vendor ABI is brought up.
+# PRO 5 launched on Android 5.1. Android 12 renamed the manifest override;
+# keep legacy non-Treble behavior and let checkvintf own the final matrix.
 PRODUCT_SHIPPING_API_LEVEL := 22
-PRODUCT_ENFORCE_VINTF_MANIFEST := false
+PRODUCT_ENFORCE_VINTF_MANIFEST_OVERRIDE := true
 
 PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := xxhdpi
@@ -21,11 +21,12 @@ TARGET_SCREEN_WIDTH := 1080
 
 PRODUCT_SOONG_NAMESPACES += \
     device/samsung/universal7420-common \
+    hardware/meizu/m86 \
     hardware/samsung \
-    hardware/samsung_slsi/exynos \
-    hardware/samsung_slsi/exynos5 \
-    hardware/samsung_slsi/exynos7420 \
-    hardware/samsung_slsi/openmax
+    hardware/samsung_slsi-linaro/exynos \
+    hardware/samsung_slsi-linaro/exynos5 \
+    hardware/samsung_slsi-linaro/graphics \
+    hardware/samsung_slsi-linaro/openmax
 
 # Storage owns both Android fstab destinations and the recovery mount table.
 $(call inherit-product, $(LOCAL_PATH)/storage/product.mk)
@@ -52,8 +53,15 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/etc/init.m86.rc:root/init.m86.rc \
     $(LOCAL_PATH)/rootdir/etc/init.m86.boot-sync.sh:root/init.m86.boot-sync.sh \
     $(LOCAL_PATH)/rootdir/etc/init.m86.sensors.rc:root/init.m86.sensors.rc \
-    $(LOCAL_PATH)/rootdir/etc/ueventd.m86.rc:root/ueventd.m86.rc
+    $(LOCAL_PATH)/rootdir/etc/ueventd.m86.rc:root/ueventd.m86.rc \
+    $(LOCAL_PATH)/task_profiles.json:$(TARGET_COPY_OUT_VENDOR)/etc/task_profiles.json
 
+# Android 12 ueventd reads device rules from /vendor/etc/ueventd.rc through
+# the unconditional import in /system/etc/ueventd.rc. Without this, /dev/mali0,
+# /dev/ion and /dev/ump fall back to 0600 root:root and SurfaceFlinger (uid
+# system) cannot open the Mali DDK device.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/rootdir/etc/ueventd.m86.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc
 # Minimum feature declaration for the first boot/recovery milestone.
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:system/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
@@ -78,18 +86,20 @@ PRODUCT_COPY_FILES += \
 # the Samsung source dependency unmodified.
 $(call inherit-product, $(LOCAL_PATH)/graphics/product.mk)
 
-# Bluetooth. The m86-owned 32-bit wrapper consumes the verified Flyme vendor
-# library and owns address derivation, SCO setup, service, and init lifecycle.
+# Bluetooth. The m86-owned 32-bit wrapper owns the A12 IBluetoothHci service
+# and installs under the canonical passthrough implementation name; the Flyme
+# Broadcom vendor interface and firmware path remain the only blob boundary.
 PRODUCT_PACKAGES += \
+    android.hardware.bluetooth@1.0 \
     android.hardware.bluetooth@1.0-impl.m86 \
     android.hardware.bluetooth@1.0-service.m86
+
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/bluetooth/bt_vendor.conf:$(TARGET_COPY_OUT_SYSTEM)/etc/bluetooth/bt_vendor.conf
 
 # Radio lifecycle. The platform rild/libril selection and SITRIL ABI remain
 # unchanged; the m86 fragment owns the reset trigger and service name.
 $(call inherit-product, $(LOCAL_PATH)/radio/product.mk)
-
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/bluetooth/bt_vendor.conf:$(TARGET_COPY_OUT_SYSTEM)/etc/bluetooth/bt_vendor.conf
 
 # Media is source-owned from the Exynos OpenMAX stack. The m86 fragment only
 # selects the codec modules; it does not modify the unmodified Samsung source.
@@ -105,8 +115,7 @@ PRODUCT_COPY_FILES += \
 # Android 10's base policy does not allow it, so install the same narrow
 # device policy used by the maintained universal7420 family.
 PRODUCT_COPY_FILES += \
-    device/samsung/universal7420-common/configs/seccomp/mediacodec.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediacodec.policy \
-    device/samsung/universal7420-common/configs/seccomp/mediaextractor.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediaextractor.policy
+    device/samsung/universal7420-common/seccomp/mediacodec.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediacodec.policy
 
 # PRO5 has no usable Keymaster blob in the final Flyme dump. Use Android's
 # software Keymaster 4 implementation so keystore can start instead of
@@ -115,13 +124,14 @@ PRODUCT_PACKAGES += \
     android.hardware.keymaster@4.0-impl \
     android.hardware.keymaster@4.0-service
 
-# Radio. AOSP's Android 10 rild/libril translates the legacy callback ABI to
-# HIDL radio 1.1 for both slots. It loads the hash-locked Flyme 8 libsitril.so;
-# the stock socket-only rild_exynos is deliberately not started.
+# Radio. AOSP's legacy rild/libril translates the Flyme callback ABI to HIDL
+# radio 1.1 for both slots. Android 12 loads the hash-locked SITRIL through
+# vendor.rild.* properties; the stock pre-HIDL rild_exynos remains disabled.
 PRODUCT_PACKAGES += \
     android.hardware.radio@1.0 \
     android.hardware.radio@1.1 \
     android.hardware.radio.deprecated@1.0 \
+    libm86cutils_sitril_shim \
     libril \
     rild
 
@@ -129,7 +139,7 @@ PRODUCT_PACKAGES += \
 # GNSS 1.0; gpsd continues to consume the byte-exact production configuration.
 PRODUCT_PACKAGES += \
     android.hardware.gnss@1.0 \
-    android.hardware.gnss@1.0-impl.zero \
+    android.hardware.gnss@1.0-impl \
     android.hardware.gnss@1.0-service \
     libm86gps_shim
 
@@ -153,6 +163,9 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     android.hardware.camera.provider@2.4-impl \
     android.hardware.camera.provider@2.4-service.m86 \
+    camera.m86 \
+    libexynoscamera_m86 \
+    libexynoscamera3_m86 \
     libm86camera_shim
 
 # Vibrator. The maintained Meizu kernel exposes the standard timed-output
@@ -170,13 +183,18 @@ PRODUCT_PACKAGES += \
     android.hardware.light@2.0-service \
     lights.m86
 
-# Power. Android 10's generic HIDL bridge wraps a source-built m86 HAL. It
-# limits battery-saver and interaction hints to the interfaces implemented by
-# the maintained Meizu hotplug and interactive-governor drivers.
+# Power. Use the Android 12 AIDL interface so SurfaceFlinger can keep the GPU at
+# a modest rendering floor through EXPENSIVE_RENDERING. The device service also
+# owns the existing March interaction and staged Mali floor policy.
 PRODUCT_PACKAGES += \
-    android.hardware.power@1.0-impl \
-    android.hardware.power@1.0-service \
-    power.m86
+    android.hardware.power-service.m86
+
+# Android 12 BatteryService requires a registered IHealth HIDL service.
+# The AOSP default reads the m86 power-supply uevents through libbatterymonitor.
+PRODUCT_PACKAGES += \
+    android.hardware.health@2.1-impl \
+    android.hardware.health@2.1-impl.recovery \
+    android.hardware.health@2.1-service
 
 # TARGET_SYSTEM_PROP is expanded after product makefiles have changed
 # LOCAL_PATH. Use the stable device path so it cannot resolve under

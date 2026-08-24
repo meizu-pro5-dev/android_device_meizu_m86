@@ -1,5 +1,4 @@
 # Board
-ro.product.board=m86
 ro.board.platform=exynos5
 ro.chipname=exynos7420
 
@@ -31,6 +30,10 @@ ro.hardware.hifi.support=true
 
 # Storage
 persist.sys.isolated_storage=false
+# Android 12 netd on the 3.10 kernel: keep the legacy qtaguid path.
+ro.kernel.ebpf.supported=false
+# M1 bring-up keeps adb reachable over USB by default.
+persist.sys.usb.config=adb
 # Keep the device default outside /data/property so a stale value written by
 # an earlier Android 10 build cannot re-enable isolated storage after a dirty
 # flash. StorageManagerService copies this read-only default to the runtime
@@ -42,11 +45,8 @@ ro.sys.isolated_storage=false
 # readiness handshake but use synchronous endpoint reads and writes.
 sys.usb.ffs.aio_compat=1
 
-# Radio. These values are taken from the final Flyme 8.0.5.0A system image.
-# The Android 10 rild is 64-bit and loads the latest m86 SITRIL directly.
+# Radio framework policy. The vendor rild loader properties live in vendor.prop.
 persist.radio.multisim.config=dsds
-rild.libpath=/system/lib64/libsitril.so
-rild.libargs=-d /dev/umts_ipc0
 exynos.modempath=/system/vendor/firmware/modem.bin
 ro.telephony.default_network=9
 ro.ril.ecclist=911,08,112,118,999,000

@@ -8,6 +8,13 @@
 /(vendor|system/vendor)/bin/hw/android\.hardware\.bluetooth@1\.0-service\.m86  u:object_r:hal_bluetooth_default_exec:s0
 /dev/ttySAC4                                                                   u:object_r:hci_attach_dev:s0
 
+# Label the Mali render node with the platform GPU type instead of device:s0.
+/dev/mali0                                                                     u:object_r:gpu_device:s0
+
+# Device AIDL PowerHAL. Keep the standard PowerHAL domain while exposing the
+# modern interface required by SurfaceFlinger expensive-rendering hints.
+/(vendor|system/vendor)/bin/hw/android\.hardware\.power-service\.m86             u:object_r:hal_power_default_exec:s0
+
 # The framework NFC application owns its core data path. The NXP HAL persists
 # its state below /data/vendor, which must use a vendor data type under Treble.
 # Keep secure-element /dev/p61 handling out of the reader/HCE experiment.

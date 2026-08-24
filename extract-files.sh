@@ -11,7 +11,7 @@ vendor="meizu"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 lineage_root="$(cd "$script_dir/../../.." && pwd)"
-helper="$lineage_root/vendor/lineage/build/tools/extract_utils.sh"
+helper="$lineage_root/tools/extract-utils/extract_utils.sh"
 
 if [[ ! -f "$helper" ]]; then
   printf 'Unable to find extract helper: %s\n' "$helper" >&2

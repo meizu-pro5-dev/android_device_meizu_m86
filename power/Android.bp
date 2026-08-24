@@ -1,13 +1,21 @@
 // Copyright (C) 2026 The LineageOS Project
 // SPDX-License-Identifier: Apache-2.0
 
-cc_library_shared {
-    name: "power.m86",
+cc_binary {
+    name: "android.hardware.power-service.m86",
     relative_install_path: "hw",
-    proprietary: true,
-    srcs: ["PowerHAL.c"],
-    header_libs: ["libhardware_headers"],
-    shared_libs: ["liblog"],
+    init_rc: ["android.hardware.power-service.m86.rc"],
+    vintf_fragments: ["android.hardware.power-service.m86.xml"],
+    vendor: true,
+    srcs: [
+        "Power.cpp",
+        "service.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.power-V2-ndk_platform",
+        "libbinder_ndk",
+        "liblog",
+    ],
     cflags: [
         "-Wall",
         "-Wextra",

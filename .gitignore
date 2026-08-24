@@ -4,3 +4,4 @@ __pycache__/
 *.orig
 *.rej
 /out/
+/prebuilt/dtb.img

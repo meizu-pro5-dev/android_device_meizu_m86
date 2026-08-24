@@ -1,0 +1,2 @@
+# Keep Power HAL access narrower than the generic CPU sysfs tree.
+allow hal_power_default m86_sysfs_power:file { getattr open write };

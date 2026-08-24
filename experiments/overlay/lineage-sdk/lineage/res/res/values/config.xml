@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- Flyme's fpc_enumerate() returns success without reporting any
+         templates or the terminating remaining=0 callback. Fingerprint21's
+         cleanup client would therefore occupy the scheduler forever and
+         block enrollment and authentication. The Flyme HAL and matcher TA
+         already own their template database, so disable only that framework
+         reconciliation step. This resource belongs to
+         org.lineageos.platform-res, not framework-res. -->
+    <bool name="config_cleanupUnusedFingerprints">false</bool>
+</resources>

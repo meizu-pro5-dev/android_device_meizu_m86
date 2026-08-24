@@ -9,6 +9,7 @@ LOCAL_PATH := device/meizu/m86
 # and device gates.
 PRODUCT_PACKAGES += \
     audio.primary.m86 \
+    android.hardware.audio.service \
     android.hardware.audio@5.0-impl:32 \
     android.hardware.audio.effect@5.0-impl:32 \
     audio.r_submix.default \

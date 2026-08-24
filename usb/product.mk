@@ -15,6 +15,9 @@ PRODUCT_COPY_FILES += \
 
 # Start with no data function. UsbDeviceManager appends adb only when USB
 # debugging is enabled. Synchronous FunctionFS is required by this 3.10 gadget.
+# M1 bring-up keeps adb enabled by default; Settings can still change modes.
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
     ro.adb.nonblocking_ffs=false \
-    persist.sys.usb.config=none
+    persist.sys.usb.config=adb
+
+PRODUCT_PRODUCT_PROPERTIES += persist.sys.usb.config=adb

@@ -21,7 +21,8 @@ PRODUCT_PACKAGES += \
 # /data/misc/gatekeeper before loading it.
 PRODUCT_PACKAGES += \
     m86_gatekeeper_service \
-    android.hardware.gatekeeper@1.0-impl
+    android.hardware.gatekeeper@1.0-impl \
+    libgatekeeper_m86
 
 # The stock Flyme HAL stubs enumerate(), so FingerprintService's internal
 # template cleanup would never complete and would block every client; the

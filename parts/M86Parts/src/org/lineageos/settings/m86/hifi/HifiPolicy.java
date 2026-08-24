@@ -55,7 +55,7 @@ public final class HifiPolicy {
         final AudioManager audio = (AudioManager) context.getSystemService(
                 Context.AUDIO_SERVICE);
         if (audio != null) {
-            audio.setParameters("hifi_state=" + (enabled ? "on" : "off")
+            audio.setParameters("m86_hifi_enabled=" + (enabled ? "on" : "off")
                     + ";hifi_gain=" + gain);
         }
     }

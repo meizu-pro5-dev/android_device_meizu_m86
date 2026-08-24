@@ -2,12 +2,13 @@
 <!-- Copyright (C) 2026 The LineageOS Project
      SPDX-License-Identifier: Apache-2.0 -->
 <resources>
-    <!-- The stock Flyme fingerprint HAL stubs enumerate() (fpc_enumerate is
-         an 8-byte "return 0" with no notify callbacks), so FingerprintService's
-         internal template-cleanup client never receives the terminating
-         enumeration message and stays current forever. Every subsequent
-         enroll/authenticate client is then parked as pending and the sensor
-         never starts. The Flyme HAL manages its own template database, so
-         disable the framework-side HAL sync. -->
-    <bool name="config_cleanupUnusedFingerprints">false</bool>
+    <!-- Android 12 no longer discovers a legacy HIDL biometric solely from
+         the registered 2.1 service. AuthService creates its provider from
+         this ID:modality:strength entry. The Trustonic matcher and the stock
+         Gatekeeper TA retain the hardware-auth-token chain, so expose the
+         single FPC sensor as a strong fingerprint authenticator. -->
+    <string-array name="config_biometric_sensors" translatable="false">
+        <!-- ID0:Fingerprint:Strong -->
+        <item>0:2:15</item>
+    </string-array>
 </resources>

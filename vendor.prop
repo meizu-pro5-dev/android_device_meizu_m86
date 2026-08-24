@@ -1,0 +1,6 @@
+# Android 12's product-compatible rild reads only the vendor-prefixed loader
+# properties. Keep the locked Flyme SITRIL path and modem IPC argument paired.
+vendor.rild.libpath=/system/lib64/libsitril.so
+vendor.rild.libargs=-d /dev/umts_ipc0
+
+# The dual-SIM policy remains in system.prop for the telephony framework.

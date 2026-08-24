@@ -8,6 +8,7 @@ cc_library_shared {
     shared_libs: [
         "libsensor",
         "libssl",
+        "libutils",
     ],
     ldflags: ["-Wl,--no-as-needed"],
     cflags: [

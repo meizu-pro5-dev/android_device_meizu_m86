@@ -16,10 +16,12 @@ newer fields at different offsets.
 `hardware/meizu/m86/audio/LegacyAudioAbiContract.h` records the verified
 32-bit offsets without changing the platform `hardware/audio.h`. M86Parts
 stores the device-wide HiFi state in `Settings.Global` and directly sends
-`hifi_state`/`hifi_gain` through `AudioManager`; this wrapper persists the
-values in vendor properties and applies them to the private device/output
-callbacks. Route changes, output reopen, and audioserver restart recover in
-the wrapper without an AudioService or AudioFlinger HiFi special case.
+`m86_hifi_enabled`/`hifi_gain` through `AudioManager`; the wrapper persists
+that user policy separately from AudioFlinger's per-output `hifi_state`
+request. The raw HAL sees HiFi enabled only when the user switch, a compatible
+PRIMARY mixer route, and a wired output are all active. Route changes, output
+reopen, and audioserver restart therefore fail closed instead of leaving the
+DAC latched in its previous mode.
 
 1. Install a 32-bit source wrapper as `audio.primary.m86.so` and rename the
    locked Flyme blob to a private, absolute-path-only input.
@@ -28,7 +30,7 @@ the wrapper without an AudioService or AudioFlinger HiFi special case.
    and input-stream pointer at the wrapper boundary.
 3. Keep post-legacy output/input callbacks null or return `-ENOSYS`; never
    expose the Flyme private tail to the Android 10 HIDL wrapper.
-4. Intercept `vendor.meizu.set_headphone_volume=1` and the two HiFi keys in
+4. Intercept `vendor.meizu.set_headphone_volume=1` and the HiFi policy keys in
    the public wrapper. Dispatch headphone volume to offset 104 on output open
    and every route transition, route HiFi state to the active output, and
    send gain to the private device callback. Persist both values so an
@@ -40,8 +42,8 @@ the wrapper without an AudioService or AudioFlinger HiFi special case.
 The 64-bit primary HAL has no standard consumer while audioserver and the
 passthrough manifest are 32-bit. It is an explicit removal candidate, but is
 not removed until a full target-files gate proves there is no other 64-bit
-legacy loader. HiFi UI and global persistence are a separate M5 sub-domain;
-the Settings product patch and AudioFlinger HiFi branch are retired.
+legacy loader. HiFi UI, global persistence, and PRIMARY-mixer rate arbitration
+remain separate layers; no application whitelist is part of that contract.
 
 The legacy route contract is deliberate. The verified direct Flyme HAL reports
 `AUDIO_DEVICE_API_VERSION_2_0`, so Android 10's `Device` implementation uses

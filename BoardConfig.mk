@@ -22,7 +22,8 @@ AUDIOSERVER_MULTILIB := 32
 # the old libgui dependency graph. Inject only the source-built m86 shim.
 TARGET_LD_SHIM_LIBS := \
     /system/lib/libexynoscamera.so|/system/lib/libm86camera_shim.so \
-    /system/bin/gpsd|/system/lib64/libm86gps_shim.so
+    /system/bin/gpsd|/system/lib64/libm86gps_shim.so \
+    /system/lib64/libril_sitril.so|/system/lib64/libm86cutils_sitril_shim.so
 
 # Codec ownership moved from the Flyme OMX blobs to the source-built
 # Exynos OpenMAX components. Those components use Android 10's native
@@ -43,7 +44,10 @@ BOARD_SEPOLICY_DIRS := device/meizu/m86/sepolicy
 TARGET_OTA_ASSERT_DEVICE := m86,PRO5,pro5,mx5pro,niux,NIUX
 
 # Bootloader
-TARGET_BOOTLOADER_BOARD_NAME := PRO5
+# The lineage-19.1 SLSI BSP derives hwcomposer/memtrack module names from
+# TARGET_BOOTLOADER_BOARD_NAME. The kernel supplies androidboot.hardware=m86,
+# and the SLSI BSP names hwcomposer/memtrack modules from this variable.
+TARGET_BOOTLOADER_BOARD_NAME := m86
 TARGET_NO_BOOTLOADER := true
 
 # Display
@@ -86,6 +90,7 @@ BOARD_KERNEL_PAGESIZE := 4096
 # Android 10 unconditionally appends buildvariant=<variant> to the internal
 # command line. mkbootimg accepts the last occurrence, so override it here to
 # preserve the empty stock header without changing the platform for others.
+BOARD_RAMDISK_USE_GZIP := true
 BOARD_MKBOOTIMG_ARGS := \
     --cmdline "" \
     --kernel_offset 0x00080000 \

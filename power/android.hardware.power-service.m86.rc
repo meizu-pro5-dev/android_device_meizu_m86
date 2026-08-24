@@ -1,0 +1,6 @@
+service vendor.power-hal-aidl /vendor/bin/hw/android.hardware.power-service.m86
+    class hal
+    user system
+    group system
+    priority -20
+    interface aidl android.hardware.power.IPower/default

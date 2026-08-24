@@ -1,0 +1,4 @@
+# The camera module implements camera_module_t::set_torch_mode through the
+# LM3644 LED class exposed by the m86 kernel.
+allow hal_camera_default sysfs_leds:dir r_dir_perms;
+allow hal_camera_default sysfs_leds:file rw_file_perms;

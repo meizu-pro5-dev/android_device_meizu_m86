@@ -1,0 +1,5 @@
+# The interactive governor creates policy attributes from kernel context and
+# restores their system owner after every big-cluster hotplug cycle.
+allow kernel self:capability chown;
+allow kernel sysfs_devices_system_cpu:file setattr;
+allow kernel m86_sysfs_power:file setattr;

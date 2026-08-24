@@ -8,10 +8,14 @@
 
 #include <sys/types.h>
 
+#include <android/file_descriptor_jni.h>
 #include <cutils/threads.h>
 #include <gui/GLConsumer.h>
+#include <jni.h>
 #include <log/log.h>
+#include <sensor/SensorManager.h>
 #include <ui/GraphicBuffer.h>
+#include <utils/String16.h>
 
 namespace android {
 
@@ -41,6 +45,40 @@ extern "C" pid_t androidGetTid()
 extern "C" void set_value()
 {
     ALOGV("ignored legacy set_value hook");
+}
+
+/*
+ * libnativehelper stopped exporting jniGetFDFromFileDescriptor as a data
+ * symbol; it is now an inline wrapper around AFileDescriptor_getFd. The
+ * Flyme camera stack still imports the legacy symbol, so publish the old
+ * entry point here.
+ */
+extern "C" int jniGetFDFromFileDescriptor(JNIEnv* env, jobject fileDescriptor)
+{
+    if (fileDescriptor == nullptr) {
+        return -1;
+    }
+    return AFileDescriptor_getFd(env, fileDescriptor);
+}
+
+/*
+ * SensorManager::createEventQueue(String8, int) gained an attributionTag
+ * parameter in Android 12. The Flyme camera stack was linked against the
+ * two-argument entry point. Export the legacy mangled member ABI and forward
+ * it to the current implementation with an empty attribution tag.
+ */
+android::sp<android::SensorEventQueue> legacyCreateEventQueue(
+        android::SensorManager* manager,
+        android::String8 packageName,
+        int mode)
+        __asm__("_ZN7android13SensorManager16createEventQueueENS_7String8Ei");
+
+android::sp<android::SensorEventQueue> legacyCreateEventQueue(
+        android::SensorManager* manager,
+        android::String8 packageName,
+        int mode)
+{
+    return manager->createEventQueue(packageName, mode, android::String16());
 }
 
 /*

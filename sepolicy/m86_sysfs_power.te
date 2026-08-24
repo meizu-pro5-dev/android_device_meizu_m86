@@ -1,0 +1,5 @@
+# Interactive governor and March hotplug controls used by the m86 Power HAL.
+type m86_sysfs_power, fs_type, sysfs_type;
+
+# init assigns the GPU floor node to the system-owned legacy Power HAL.
+allow init m86_sysfs_power:file setattr;

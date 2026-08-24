@@ -9,8 +9,10 @@ cc_library_shared {
         "libcutils",
         "libgui",
         "liblog",
+        "libnativehelper",
         "libsensor",
         "libui",
+        "libutils",
     ],
     ldflags: ["-Wl,--no-as-needed"],
     cflags: [
@@ -44,7 +46,6 @@ cc_binary {
         "libcamera_metadata",
         "libhardware",
         "libhidlbase",
-        "libhidltransport",
         "liblog",
         "libutils",
     ],

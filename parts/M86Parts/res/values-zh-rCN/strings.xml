@@ -6,9 +6,6 @@
     <string name="mback_navigation_title">使用 mBack 导航</string>
     <string name="mback_navigation_summary">隐藏屏幕导航栏并启用 mBack 动作</string>
     <string name="mback_tap_title">轻触操作</string>
-    <string name="mback_double_tap_title">双击操作</string>
-    <string name="mback_swipe_left_title">向左滑动操作</string>
-    <string name="mback_swipe_right_title">向右滑动操作</string>
     <string name="mback_feedback_category">反馈</string>
     <string name="mback_sound_title">触摸音</string>
     <string name="mback_haptic_title">振动强度</string>

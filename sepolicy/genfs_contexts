@@ -2,3 +2,17 @@
 genfscon sysfs /devices/11460000.uart/bluetooth.13/rfkill/rfkill0/state u:object_r:sysfs_bluetooth_writable:s0
 genfscon sysfs /module/bcmdhd/parameters/firmware_path u:object_r:sysfs_wlan_fwpath:s0
 genfscon sysfs /devices/virtual/android_usb/android0/iSerial u:object_r:sysfs_android_usb:s0
+
+# Power HAL owns only the interactive boost and March hotplug controls it uses.
+genfscon sysfs /devices/system/cpu/cpu0/cpufreq/interactive/boostpulse u:object_r:m86_sysfs_power:s0
+genfscon sysfs /devices/system/cpu/cpu0/cpufreq/interactive/boostpulse_duration u:object_r:m86_sysfs_power:s0
+genfscon sysfs /devices/system/cpu/cpu4/cpufreq/interactive/boostpulse u:object_r:m86_sysfs_power:s0
+genfscon sysfs /devices/system/cpu/cpu4/cpufreq/interactive/boostpulse_duration u:object_r:m86_sysfs_power:s0
+genfscon sysfs /kernel/hmp/boostpulse u:object_r:m86_sysfs_power:s0
+genfscon sysfs /kernel/hmp/boostpulse_duration u:object_r:m86_sysfs_power:s0
+genfscon sysfs /module/exynos_march_cpu_hotplug/parameters/current_profile_no u:object_r:m86_sysfs_power:s0
+genfscon sysfs /module/exynos_march_cpu_hotplug/parameters/cl1_booster u:object_r:m86_sysfs_power:s0
+genfscon sysfs /module/exynos_march_cpu_hotplug/parameters/min_cpu_boosted u:object_r:m86_sysfs_power:s0
+genfscon sysfs /module/exynos_march_cpu_hotplug/parameters/interaction_boost u:object_r:m86_sysfs_power:s0
+genfscon sysfs /devices/14ac0000.mali/dvfs_min_lock u:object_r:m86_sysfs_power:s0
+genfscon sysfs /devices/14ac0000.mali/dvfs_max_lock u:object_r:m86_sysfs_power:s0
