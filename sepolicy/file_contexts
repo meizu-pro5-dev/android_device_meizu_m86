@@ -15,6 +15,11 @@
 # modern interface required by SurfaceFlinger expensive-rendering hints.
 /(vendor|system/vendor)/bin/hw/android\.hardware\.power-service\.m86             u:object_r:hal_power_default_exec:s0
 
+# The dedicated 32-bit provider must enter the standard camera HAL domain.
+# Without the exec type, init treats the binary as vendor_file and refuses the
+# transition once enforcing is restored.
+/(vendor|system/vendor)/bin/hw/android\.hardware\.camera\.provider@2\.4-service\.m86  u:object_r:hal_camera_default_exec:s0
+
 # The framework NFC application owns its core data path. The NXP HAL persists
 # its state below /data/vendor, which must use a vendor data type under Treble.
 # Keep secure-element /dev/p61 handling out of the reader/HCE experiment.
