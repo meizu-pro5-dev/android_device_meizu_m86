@@ -21,8 +21,10 @@ AUDIOSERVER_MULTILIB := 32
 # the Flyme libexynoscamera path. Preserve the path-scoped stock rule only for
 # rollback products that select the Flyme engine.
 ifneq ($(M86_USE_PREBUILT_EXYNOS_HAL3),true)
+ifneq ($(M86_USE_NATIVE_EXYNOS_HAL3),true)
 TARGET_LD_SHIM_LIBS := \
     /system/lib/libexynoscamera.so|/system/lib/libm86camera_shim.so
+endif
 endif
 
 TARGET_LD_SHIM_LIBS += \
