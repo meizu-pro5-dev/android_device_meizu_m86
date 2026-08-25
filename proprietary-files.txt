@@ -113,6 +113,17 @@ lib/soundfx/libaudiopreprocessing.so
 lib/soundfx/libbundlewrapper.so
 lib/soundfx/libdownmix.so
 lib/soundfx/libldnhncr.so
+
+# Route A: checked universal7420 donor Camera3 stack. Import and patch these
+# with hardware/meizu/m86/camera/prebuilt3_route_a/import-route-a-blobs.sh;
+# they are not present in the original M86 image.
+vendor/lib/hw/camera.vendor.exynos5.so
+vendor/lib/libexynoscamera.so
+vendor/lib/libexynoscamera3.so
+vendor/lib/libhwjpeg.so
+vendor/lib/libsecnativefeature.so
+vendor/lib/libsensorlistener.so
+vendor/lib/libuniplugin.so
 lib64/extend/libCodec.adpcmdec.so
 lib64/extend/libCodec.adt.so
 lib64/extend/libCodec.lpcm.so
