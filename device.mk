@@ -167,7 +167,7 @@ PRODUCT_PACKAGES += \
     libm86camera_shim
 
 ifeq ($(M86_USE_PREBUILT_EXYNOS_HAL3),true)
-PRODUCT_PACKAGES += libm86camera3_routea
+PRODUCT_PACKAGES += libm86camera3_bridge
 else ifeq ($(M86_USE_NATIVE_EXYNOS_HAL3),true)
 PRODUCT_PACKAGES += libexynoscamera3_m86
 else
