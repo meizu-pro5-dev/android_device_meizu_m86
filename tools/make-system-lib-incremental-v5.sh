@@ -23,7 +23,8 @@ The generated installer:
   * accepts the declared base hash or the new payload hash (safe reflash);
   * verifies unchanged files passed with --verify;
   * reuses/remounts the active system mount and never unmounts it;
-  * does not touch boot, vendor, Magisk, or files outside /system/lib{,64}.
+  * does not touch boot, Magisk, or files outside the system and
+    system/vendor library directories.
 
 NAME must contain only lowercase letters, digits, and dashes. SOURCE and output
 paths may be relative to the Android source root. Run the tool from any path
@@ -79,8 +80,8 @@ validate_sha() {
 validate_target() {
     local target="$1"
     case "$target" in
-        /system/lib/*|/system/lib64/*) ;;
-        *) die "target must be below /system/lib or /system/lib64: $target" ;;
+        /system/lib/*|/system/lib64/*|/system/vendor/lib/*|/system/vendor/lib64/*) ;;
+        *) die "target must be below a system or system/vendor lib directory: $target" ;;
     esac
     [[ "$target" != *".."* && "$target" != *"|"* && "$target" != *[[:space:]]* ]] ||
         die "unsafe target path: $target"
@@ -365,7 +366,15 @@ while IFS='|' read -r kind relative base_sha new_sha; do
     chown 0:0 "$temporary" || exit 32
     chmod 0644 "$temporary" || exit 33
     if command -v chcon >/dev/null 2>&1; then
-        chcon u:object_r:system_lib_file:s0 "$temporary" || exit 34
+        case "$relative" in
+            vendor/lib/*|vendor/lib64/*)
+                target_context=u:object_r:vendor_file:s0
+                ;;
+            *)
+                target_context=u:object_r:system_lib_file:s0
+                ;;
+        esac
+        chcon "$target_context" "$temporary" || exit 34
     fi
     if command -v cmp >/dev/null 2>&1; then
         cmp "$source" "$temporary" >/dev/null 2>&1 || exit 35
@@ -413,7 +422,7 @@ ui_print("$safe_title");
 ui_print("Required base: $safe_base_label");
 ui_print("Replacing ${#payload_rows[@]} system library file(s)");
 ui_print("Verifying ${#verify_rows[@]} unchanged dependency file(s)");
-ui_print("Boot image, vendor and Magisk are left untouched");
+ui_print("Boot image, vendor partition and Magisk are left untouched");
 ui_print("v5 mount logic: reuse system and never unmount it");
 
 package_extract_dir("payload", "/tmp/m86-${name}-payload") ||
@@ -494,7 +503,7 @@ idsig_sha="$(sha256_file "$idsig")"
     printf -- '- `%s.idsig`: `%s`\n' "$zip_name" "$idsig_sha"
     printf '\n## Scope and validation\n\n'
     printf '%s\n' '- Reuses/remounts the active system mount and never unmounts it.'
-    printf '%s\n' '- Does not modify boot, vendor, Magisk, or files outside `/system/lib{,64}`.'
+    printf '%s\n' '- Does not modify boot, the vendor partition, Magisk, or files outside the declared system library directories.'
     printf '%s\n' '- Validates base hashes, payload hashes, shell syntax, ZIP integrity, payload count, APK Signature Block, and v4 idsig.'
     if [[ ${#test_notes[@]} -gt 0 ]]; then
         printf '\n## Device validation notes\n\n'

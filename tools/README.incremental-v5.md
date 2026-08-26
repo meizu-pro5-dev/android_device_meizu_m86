@@ -1,13 +1,15 @@
 # M86 system library incremental ZIP workflow
 
-`make-system-lib-incremental-v5.sh` turns one or more rebuilt `/system/lib` or
-`/system/lib64` files into the recovery-flashable v5 format used by the Camera3
-bring-up packages.
+`make-system-lib-incremental-v5.sh` turns one or more rebuilt `/system/lib`,
+`/system/lib64`, or legacy vendor-in-system library files into the
+recovery-flashable v5 format used by the Camera3 bring-up packages.
 
-The workflow is deliberately narrow: it cannot package boot, vendor, Magisk,
-configuration files, or arbitrary system paths. Each replacement declares the
-exact SHA-256 of its immediately preceding version. The recovery installer also
-accepts the new SHA-256, making an already-installed ZIP safe to reflash.
+The workflow is deliberately narrow: it cannot package boot, a separate vendor
+partition, Magisk, configuration files, or arbitrary system paths. Each
+replacement declares the exact SHA-256 of its immediately preceding version.
+The recovery installer also accepts the new SHA-256, making an already-installed
+ZIP safe to reflash. Files below `/system/vendor/lib{,64}` receive the
+`vendor_file` SELinux label.
 
 ## Camera3 example
 
