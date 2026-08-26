@@ -72,3 +72,9 @@ BOARD_USES_SKIA_FIMGAPI := true
 BOARD_USES_FIMGAPI_V5X := true
 BOARD_USES_DEFAULT_CSC_HW_SCALER := true
 BOARD_USES_SCALER_M2M1SHOT := true
+
+# gralloc.m86 owns the native_handle ABI consumed by the legacy Exynos OMX
+# gralloc0 path. Keep this include ahead of the generic SLSI headers so every
+# codec reads the same private_handle_t layout that allocated the buffer.
+BOARD_EXYNOS_OMX_GRALLOC_PRIV_INCLUDE := \
+    hardware/meizu/m86/graphics/gralloc/a10-contract
