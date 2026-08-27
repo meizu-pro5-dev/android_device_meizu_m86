@@ -54,7 +54,7 @@ constexpr char kGpuFloorRendering[] = "420";
 constexpr char kGpuFloorDisplayUpdate[] = "544";
 constexpr char kGpuFloorHigh[] = "700";
 constexpr unsigned int kGpuDisplayUpdateMs = 100;
-constexpr unsigned int kGpuInteractionHighMs = 300;
+constexpr unsigned int kGpuInteractionHighMs = 500;
 constexpr unsigned int kGpuInteractionMs = 800;
 constexpr unsigned int kGpuLaunchMs = 1300;
 
