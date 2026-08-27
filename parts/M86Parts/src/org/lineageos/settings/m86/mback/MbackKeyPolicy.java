@@ -7,6 +7,11 @@ package org.lineageos.settings.m86.mback;
 
 /** Pure input identity and navigation-mode policy for the PRO 5 mBack key. */
 final class MbackKeyPolicy {
+    // The TEE fingerprint stack can emit its tap when the finger leaves the
+    // sensor after a mechanical HOME press. The same 500 ms debounce window
+    // is used by the Meizu m1721 device policy for this hardware interaction.
+    static final long PHYSICAL_HOME_TAP_COOLDOWN_MS = 500;
+
     static final int GESTURE_NONE = 0;
     static final int GESTURE_TAP = 1;
     static final int GESTURE_DOUBLE_TAP = 2;
@@ -60,6 +65,22 @@ final class MbackKeyPolicy {
             default:
                 return GESTURE_NONE;
         }
+    }
+
+    static boolean isUinputTap(String deviceName, int keyCode, int scanCode) {
+        return DEVICE_UINPUT_FPC.equals(deviceName)
+                && keyCode == KEYCODE_F9 && scanCode == 305;
+    }
+
+    static boolean shouldSuppressUinputTap(boolean physicalHomeDown,
+            long lastPhysicalHomeUpTime, long tapEventTime) {
+        if (physicalHomeDown) {
+            return true;
+        }
+        if (lastPhysicalHomeUpTime < 0 || tapEventTime < lastPhysicalHomeUpTime) {
+            return false;
+        }
+        return tapEventTime - lastPhysicalHomeUpTime <= PHYSICAL_HOME_TAP_COOLDOWN_MS;
     }
 
     static boolean shouldExecute(int gesture, boolean mbackEnabled) {

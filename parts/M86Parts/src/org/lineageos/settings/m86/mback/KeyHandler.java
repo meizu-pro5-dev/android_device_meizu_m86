@@ -38,6 +38,8 @@ public final class KeyHandler implements DeviceKeyHandler {
     private final PowerManager mPowerManager;
     private final AudioManager mAudioManager;
     private final Vibrator mVibrator;
+    private boolean mPhysicalHomeDown;
+    private long mLastPhysicalHomeUpTime = -1;
 
     public KeyHandler(Context context) {
         mContext = context;
@@ -61,6 +63,12 @@ public final class KeyHandler implements DeviceKeyHandler {
         // mBack is disabled, consume both halves so the mechanical key does
         // not unexpectedly reveal a navigation-bar HOME action.
         if (gesture == MbackKeyPolicy.GESTURE_PHYSICAL_HOME) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                mPhysicalHomeDown = true;
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                mPhysicalHomeDown = false;
+                mLastPhysicalHomeUpTime = event.getEventTime();
+            }
             final int userId = ActivityManager.getCurrentUser();
             MbackContract.migrateIfNeeded(mContext, userId);
             final boolean enabled = MbackContract.isMbackNavigationEnabled(
@@ -75,6 +83,19 @@ public final class KeyHandler implements DeviceKeyHandler {
 
         if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()
                 && event.getRepeatCount() == 0) {
+            final InputDevice device = event.getDevice();
+            final boolean isUinputTap = device != null && MbackKeyPolicy.isUinputTap(
+                    device.getName(), event.getKeyCode(), event.getScanCode());
+            if (isUinputTap && MbackKeyPolicy.shouldSuppressUinputTap(mPhysicalHomeDown,
+                    mLastPhysicalHomeUpTime, event.getEventTime())) {
+                Slog.d(TAG, "suppressing uinput tap after physical HOME; delta="
+                        + (event.getEventTime() - mLastPhysicalHomeUpTime));
+                return null;
+            }
+            if (isUinputTap && mPowerManager != null && !mPowerManager.isInteractive()) {
+                Slog.d(TAG, "suppressing uinput tap while display is off");
+                return null;
+            }
             mHandler.post(() -> performGesture(gesture, event.getDeviceId()));
         }
 

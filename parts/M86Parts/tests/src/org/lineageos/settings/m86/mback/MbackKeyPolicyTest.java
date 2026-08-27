@@ -37,6 +37,23 @@ public final class MbackKeyPolicyTest {
                 "uinput-fpc", 139, 305);
         expectGesture("physical home", MbackKeyPolicy.GESTURE_PHYSICAL_HOME,
                 "gpio-keys", 3, 102);
+        expect(MbackKeyPolicy.isUinputTap("uinput-fpc", 139, 305),
+                "the private uinput F9 event must be recognized as a tap");
+        expect(!MbackKeyPolicy.isUinputTap("USB Keyboard", 139, 305),
+                "an external keyboard must not enter the Home cooldown");
+        expect(!MbackKeyPolicy.isUinputTap("fpc1020", 139, 158),
+                "the raw FPC gesture path must not enter the uinput cooldown");
+
+        expect(MbackKeyPolicy.shouldSuppressUinputTap(true, -1, 1000),
+                "a uinput tap while physical Home is held must be suppressed");
+        expect(MbackKeyPolicy.shouldSuppressUinputTap(false, 1000, 1500),
+                "the cooldown boundary must be inclusive");
+        expect(!MbackKeyPolicy.shouldSuppressUinputTap(false, 1000, 1501),
+                "a standalone tap after the cooldown must execute");
+        expect(!MbackKeyPolicy.shouldSuppressUinputTap(false, -1, 1000),
+                "a tap before any physical Home event must execute");
+        expect(!MbackKeyPolicy.shouldSuppressUinputTap(false, 1100, 1000),
+                "out-of-order timestamps must not suppress a tap");
 
         expectGesture("external F9 isolated", MbackKeyPolicy.GESTURE_NONE,
                 "USB Keyboard", 139, 158);
