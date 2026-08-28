@@ -85,8 +85,15 @@ TARGET_LINUX_KERNEL_VERSION := 3.10
 TARGET_USES_UNCOMPRESSED_KERNEL := true
 TARGET_KERNEL_CLANG_COMPILE := false
 TARGET_KERNEL_LLVM_BINUTILS := false
+# Android 13's default host Clang is not on the legacy kernel tool PATH when
+# GCC is retained. Use the same self-contained host toolchain as the other
+# Exynos7420 LineageOS 20 devices so -fuse-ld=lld can resolve its linker.
+TARGET_KERNEL_CLANG_VERSION := r416183b
+TARGET_KERNEL_CLANG_PATH := $(abspath .)/prebuilts/clang/kernel/$(HOST_PREBUILT_TAG)/clang-$(TARGET_KERNEL_CLANG_VERSION)
 M86_KERNEL_BUILD_JOBS ?= 4
-TARGET_KERNEL_ADDITIONAL_FLAGS += -j$(M86_KERNEL_BUILD_JOBS)
+TARGET_KERNEL_ADDITIONAL_FLAGS += \
+    -j$(M86_KERNEL_BUILD_JOBS) \
+    HOSTCFLAGS="-fuse-ld=lld -Wno-unused-command-line-argument"
 
 BOARD_KERNEL_BASE := 0x40000000
 # androidboot.hardware is compiled into cm_pro5_defconfig. Keep the v0 header
