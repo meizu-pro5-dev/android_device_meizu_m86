@@ -35,8 +35,6 @@ BOARD_RAMDISK_USE_GZIP := true
 BOARD_OVERRIDE_RS_CPU_VARIANT_32 := cortex-a53.a57
 BOARD_OVERRIDE_RS_CPU_VARIANT_64 := cortex-a57
 
-TARGET_SPECIFIC_HEADER_PATH := device/samsung/universal7420-common/include
-
 # Lineage 20 Exynos 7420 BSP defaults (TARGET_SLSI_VARIANT=linaro,
 # TARGET_SOC_BASE=exynos7420, BOARD_HWC_VERSION=libhwc1, OpenMAX flags).
 include hardware/samsung_slsi-linaro/config/BoardConfig7420.mk

@@ -20,7 +20,6 @@ TARGET_SCREEN_HEIGHT := 1920
 TARGET_SCREEN_WIDTH := 1080
 
 PRODUCT_SOONG_NAMESPACES += \
-    device/samsung/universal7420-common \
     hardware/meizu/m86 \
     hardware/samsung \
     hardware/samsung_slsi-linaro/exynos \

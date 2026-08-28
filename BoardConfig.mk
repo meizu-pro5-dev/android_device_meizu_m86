@@ -118,7 +118,7 @@ BOARD_PACK_RADIOIMAGES += dtb
 
 # Android 13 installs board-specific seccomp fragments through the build
 # system instead of copying the old Android 12 policy name directly.
-BOARD_SECCOMP_POLICY += device/samsung/universal7420-common/seccomp
+BOARD_SECCOMP_POLICY += $(M86_PATH)/seccomp
 
 # Partitions, taken from the last booting m86 community tree and checked
 # against the verified Flyme updater paths.
