@@ -84,6 +84,7 @@ endif
 TARGET_LINUX_KERNEL_VERSION := 3.10
 TARGET_USES_UNCOMPRESSED_KERNEL := true
 TARGET_KERNEL_CLANG_COMPILE := false
+TARGET_KERNEL_LLVM_BINUTILS := false
 M86_KERNEL_BUILD_JOBS ?= 4
 TARGET_KERNEL_ADDITIONAL_FLAGS += -j$(M86_KERNEL_BUILD_JOBS)
 
@@ -107,6 +108,10 @@ BOARD_MKBOOTIMG_ARGS := \
 # PRO 5 stores its raw DTB in a dedicated partition. No DTB is appended to
 # boot.img and no Samsung boot-image container is selected.
 BOARD_PACK_RADIOIMAGES += dtb
+
+# Android 13 installs board-specific seccomp fragments through the build
+# system instead of copying the old Android 12 policy name directly.
+BOARD_SECCOMP_POLICY += device/samsung/universal7420-common/seccomp
 
 # Partitions, taken from the last booting m86 community tree and checked
 # against the verified Flyme updater paths.

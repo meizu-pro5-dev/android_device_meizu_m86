@@ -1,8 +1,8 @@
 # Copyright (C) 2026 The LineageOS Project
 # SPDX-License-Identifier: Apache-2.0
 
-# m86-owned Exynos 7420 platform contract for Android 12. The unmodified
-# samsungexynos7420 lineage-19.1 SLSI BSP is an explicit build dependency;
+# m86-owned Exynos 7420 platform contract for Android 13. The
+# samsungexynos7420 lineage-20.0 SLSI BSP is an explicit build dependency;
 # m86 keeps only the overrides proven on the Android 10 product baseline.
 
 # Architecture and binder ABI
@@ -20,7 +20,7 @@ TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
 TARGET_NR_CPUS := 8
 TARGET_USES_64_BIT_BINDER := true
 
-# Android 12 bring-up behavior for the 3.10 kernel and legacy-vendor target.
+# Android 13 bring-up behavior for the 3.10 kernel and legacy-vendor target.
 USE_XML_AUDIO_POLICY_CONF := 1
 BUILD_BROKEN_DUP_RULES := true
 BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true
@@ -37,7 +37,7 @@ BOARD_OVERRIDE_RS_CPU_VARIANT_64 := cortex-a57
 
 TARGET_SPECIFIC_HEADER_PATH := device/samsung/universal7420-common/include
 
-# Unmodified lineage-19.1 Exynos 7420 BSP defaults (TARGET_SLSI_VARIANT=linaro,
+# Lineage 20 Exynos 7420 BSP defaults (TARGET_SLSI_VARIANT=linaro,
 # TARGET_SOC_BASE=exynos7420, BOARD_HWC_VERSION=libhwc1, OpenMAX flags).
 include hardware/samsung_slsi-linaro/config/BoardConfig7420.mk
 

@@ -26,7 +26,12 @@ PRODUCT_SOONG_NAMESPACES += \
     hardware/samsung_slsi-linaro/exynos \
     hardware/samsung_slsi-linaro/exynos5 \
     hardware/samsung_slsi-linaro/graphics \
+    hardware/samsung_slsi-linaro/interfaces \
     hardware/samsung_slsi-linaro/openmax
+
+# Android 13's product image rules require the explicit non-A/B contract for
+# legacy devices with standalone boot and recovery partitions.
+$(call inherit-product, $(SRC_TARGET_DIR)/product/non_ab_device.mk)
 
 # Storage owns both Android fstab destinations and the recovery mount table.
 $(call inherit-product, $(LOCAL_PATH)/storage/product.mk)
@@ -111,17 +116,10 @@ PRODUCT_COPY_FILES += \
     frameworks/av/media/libstagefright/data/media_codecs_google_telephony.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_google_telephony.xml \
     frameworks/av/media/libstagefright/data/media_codecs_google_video.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_google_video.xml
 
-# The stock Exynos OMX core queries uname while running inside media.codec.
-# Android 10's base policy does not allow it, so install the same narrow
-# device policy used by the maintained universal7420 family.
-PRODUCT_COPY_FILES += \
-    device/samsung/universal7420-common/seccomp/mediacodec.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediacodec.policy
-
 # PRO5 has no usable Keymaster blob in the final Flyme dump. Use Android's
 # software Keymaster 4 implementation so keystore can start instead of
 # aborting while probing an undeclared TEE device.
 PRODUCT_PACKAGES += \
-    android.hardware.keymaster@4.0-impl \
     android.hardware.keymaster@4.0-service
 
 # Radio. AOSP's legacy rild/libril translates the Flyme callback ABI to HIDL
@@ -208,3 +206,6 @@ PRODUCT_PACKAGES += \
 TARGET_SYSTEM_PROP := device/meizu/m86/system.prop
 
 $(call inherit-product-if-exists, vendor/meizu/m86/m86-vendor.mk)
+
+# Pull in the Android 13 SLSI namespace contract used by the 7420 BSP.
+$(call inherit-product, hardware/samsung_slsi-linaro/config/config.mk)
