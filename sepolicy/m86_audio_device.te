@@ -1,0 +1,2 @@
+# NXP Smart-PA control bus used by audio.primary.m86.
+type m86_audio_i2c_device, dev_type;

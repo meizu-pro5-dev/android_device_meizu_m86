@@ -20,6 +20,14 @@
 # transition once enforcing is restored.
 /(vendor|system/vendor)/bin/hw/android\.hardware\.camera\.provider@2\.4-service\.m86  u:object_r:hal_camera_default_exec:s0
 
+# Android 13's generic audio service mixes libbinder and libbinder_ndk pools,
+# so m86 owns a HIDL-only binary. Keep the standard audio HAL domain despite
+# the device suffix on its executable name.
+/(vendor|system/vendor)/bin/hw/android\.hardware\.audio\.service\.m86  u:object_r:hal_audio_default_exec:s0
+
+# The NXP Smart-PA control bus is private to the primary audio HAL.
+/dev/i2c-7                                                                     u:object_r:m86_audio_i2c_device:s0
+
 # The framework NFC application owns its core data path. The NXP HAL persists
 # its state below /data/vendor, which must use a vendor data type under Treble.
 # Keep secure-element /dev/p61 handling out of the reader/HCE experiment.

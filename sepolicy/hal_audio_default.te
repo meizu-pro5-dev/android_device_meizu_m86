@@ -1,0 +1,2 @@
+# Keep the legacy Smart-PA ioctl surface scoped to its dedicated I2C node.
+allow hal_audio_default m86_audio_i2c_device:chr_file rw_file_perms;
