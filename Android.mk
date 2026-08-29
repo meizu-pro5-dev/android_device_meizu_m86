@@ -11,26 +11,24 @@ LOCAL_PATH := $(M86_DEVICE_PATH)
 
 # The PRO 5 bootloader reads a raw FDT from its dedicated dtb partition. The
 # verified Flyme DTB is staged and hash-checked by install-local-trees.sh. The
-# Every release disables the two unpopulated camera sensor nodes in place.
-# NFC-only rollback builds additionally remove SPI4 secure-mode so the mutually
-# exclusive raw AP-navigation driver can own the stock FPC node. The integrated
-# and fingerprint-only products retain secure-mode for the TEE bridge. The
+# NFC-only rollback builds derive the mBack DTB by removing only SPI4
+# secure-mode so the mutually exclusive raw AP-navigation driver can own the
+# stock FPC node. The integrated/default and fingerprint-only products retain
+# the unmodified secure DTB and select only the TEE bridge. The
 # kernel-generated DTB remains diagnostic-only.
 M86_STOCK_DTB := $(M86_DEVICE_PATH)/prebuilt/dtb.img
-M86_RELEASE_DTB_TOOL := $(M86_DEVICE_PATH)/tools/build-mback-dtb.py
+M86_MBACK_DTB_TOOL := $(M86_DEVICE_PATH)/tools/build-mback-dtb.py
 M86_INSTALLED_DTB := $(PRODUCT_OUT)/dtb.img
 
 ifeq ($(M86_FPC_BACKEND),tee)
-$(M86_INSTALLED_DTB): $(M86_STOCK_DTB) $(M86_RELEASE_DTB_TOOL)
+$(M86_INSTALLED_DTB): $(M86_STOCK_DTB)
 	@echo "Target m86 secure FPC DTB: $@"
-	$(hide) python3 $(M86_RELEASE_DTB_TOOL) \
-		--stock $(M86_STOCK_DTB) \
-		--preserve-secure-mode \
-		--output $@
+	$(hide) test -s $(M86_STOCK_DTB)
+	$(hide) cp -f $(M86_STOCK_DTB) $@
 else
-$(M86_INSTALLED_DTB): $(M86_STOCK_DTB) $(M86_RELEASE_DTB_TOOL)
+$(M86_INSTALLED_DTB): $(M86_STOCK_DTB) $(M86_MBACK_DTB_TOOL)
 	@echo "Target m86 mBack DTB: $@"
-	$(hide) python3 $(M86_RELEASE_DTB_TOOL) \
+	$(hide) python3 $(M86_MBACK_DTB_TOOL) \
 		--stock $(M86_STOCK_DTB) \
 		--output $@
 endif

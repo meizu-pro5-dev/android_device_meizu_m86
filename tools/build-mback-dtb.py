@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build an m86 release DTB from the hash-locked Flyme DTB.
+"""Build the m86 AP-navigation DTB from the hash-locked Flyme DTB.
 
-Both release variants disable the two unpopulated camera sensor nodes in place.
-The AP-navigation variant also replaces SPI4's zero-length ``secure-mode``
-property with FDT_NOP tokens.  Node offsets, phandles, GPIO data and the string
-table remain unchanged.
+The release DTB keeps every stock byte except the zero-length ``secure-mode``
+property on SPI4.  The property token is replaced by FDT_NOP tokens, so node
+offsets, phandles, GPIO data and the string table remain unchanged.  The raw
+FPC driver deliberately accepts the stock child compatible and GPIO names.
 """
 
 import argparse
@@ -24,10 +24,6 @@ FDT_HEADER = struct.Struct(">10I")
 STOCK_SHA256 = "b45054fa87a5ffe114843953172d48d36408e1f93db35a6cbdfb0a8fc58a2165"
 SPI_PATH = "/spi@14d70000"
 FPC_PATH = SPI_PATH + "/securefpc_spidev@0"
-UNUSED_SENSOR_PATHS = (
-    "/fimc_is_sensor@14110000",
-    "/fimc_is_sensor@14040000",
-)
 
 
 def _align4(value):
@@ -59,7 +55,7 @@ def _parse_header(blob):
     }
 
 
-def _read_tree(blob, patch_secure_mode, patch_unused_sensors=False):
+def _read_tree(blob, patch_secure_mode):
     header = _parse_header(blob)
     struct_start = header["struct_offset"]
     struct_end = struct_start + header["struct_size"]
@@ -73,7 +69,6 @@ def _read_tree(blob, patch_secure_mode, patch_unused_sensors=False):
     nodes = []
     properties = {}
     patched_offsets = []
-    patched_sensors = []
     saw_end = False
 
     while offset + 4 <= struct_end:
@@ -107,11 +102,6 @@ def _read_tree(blob, patch_secure_mode, patch_unused_sensors=False):
                 for nop_offset in range(token_offset, token_offset + 12, 4):
                     struct.pack_into(">I", output, nop_offset, FDT_NOP)
                 patched_offsets.append(token_offset)
-            if patch_unused_sensors and path in UNUSED_SENSOR_PATHS and name == "status":
-                if value != b"okay\0":
-                    raise RuntimeError("unused sensor status changed: {}".format(path))
-                output[offset:offset + length] = b"fail\0"
-                patched_sensors.append(path)
             offset = _align4(offset + length)
         elif token == FDT_NOP:
             continue
@@ -125,7 +115,7 @@ def _read_tree(blob, patch_secure_mode, patch_unused_sensors=False):
 
     if not saw_end:
         raise RuntimeError("FDT structure has no end token")
-    return bytes(output), properties, patched_offsets, patched_sensors
+    return bytes(output), properties, patched_offsets
 
 
 def _require_stock_contract(properties):
@@ -138,9 +128,6 @@ def _require_stock_contract(properties):
     for gpio_name in ("gx,gpio_irq", "gx,gpio_reset"):
         if gpio_name not in fpc:
             raise RuntimeError("stock FPC property is missing: {}".format(gpio_name))
-    for sensor_path in UNUSED_SENSOR_PATHS:
-        if properties.get(sensor_path, {}).get("status") != b"okay\0":
-            raise RuntimeError("stock unused sensor status changed: {}".format(sensor_path))
 
 
 def main():
@@ -149,11 +136,6 @@ def main():
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument("--output")
     destination.add_argument("--verify")
-    parser.add_argument(
-        "--preserve-secure-mode",
-        action="store_true",
-        help="retain SPI4 secure-mode for the TEE fingerprint backend",
-    )
     args = parser.parse_args()
 
     stock_path = pathlib.Path(args.stock)
@@ -164,34 +146,25 @@ def main():
     if stock_hash != STOCK_SHA256:
         raise RuntimeError("stock Flyme DTB hash does not match the device baseline")
 
-    _, stock_properties, _, _ = _read_tree(stock, False)
+    _, stock_properties, _ = _read_tree(stock, False)
     _require_stock_contract(stock_properties)
-    output, _, patched_offsets, patched_sensors = _read_tree(
-        stock, not args.preserve_secure_mode, True)
-    expected_secure_patches = 0 if args.preserve_secure_mode else 1
-    if len(patched_offsets) != expected_secure_patches:
-        raise RuntimeError("unexpected SPI4 secure-mode patch count")
-    if set(patched_sensors) != set(UNUSED_SENSOR_PATHS):
-        raise RuntimeError("expected both unused camera sensors to be disabled")
+    output, _, patched_offsets = _read_tree(stock, True)
+    if len(patched_offsets) != 1:
+        raise RuntimeError("expected exactly one SPI4 secure-mode property")
 
-    _, output_properties, _, _ = _read_tree(output, False)
-    secure_mode_present = "secure-mode" in output_properties.get(SPI_PATH, {})
-    if secure_mode_present == (not args.preserve_secure_mode):
-        raise RuntimeError("release DTB has the wrong SPI4 secure-mode state")
+    _, output_properties, _ = _read_tree(output, False)
+    if "secure-mode" in output_properties.get(SPI_PATH, {}):
+        raise RuntimeError("AP-navigation DTB retained SPI4 secure-mode")
     if output_properties.get(FPC_PATH) != stock_properties.get(FPC_PATH):
-        raise RuntimeError("release DTB changed the stock FPC child")
-    for sensor_path in UNUSED_SENSOR_PATHS:
-        if output_properties.get(sensor_path, {}).get("status") != b"fail\0":
-            raise RuntimeError("release DTB retained unused sensor: {}".format(sensor_path))
+        raise RuntimeError("AP-navigation DTB changed the stock FPC child")
     changed_bytes = sum(left != right for left, right in zip(stock, output))
-    expected_changed_bytes = 8 + (0 if args.preserve_secure_mode else 4)
-    if len(output) != len(stock) or changed_bytes != expected_changed_bytes:
-        raise RuntimeError("DTB mutation exceeded the approved in-place changes")
+    if len(output) != len(stock) or changed_bytes != 4:
+        raise RuntimeError("DTB mutation exceeded the three FDT token words")
 
     if args.verify:
         verified = pathlib.Path(args.verify).read_bytes()
         if verified != output:
-            raise RuntimeError("verified DTB differs from the release derivation")
+            raise RuntimeError("verified DTB differs from the mBack derivation")
     else:
         output_path = pathlib.Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,12 +176,9 @@ def main():
         temporary_path.replace(output_path)
 
     print("stock_dtb_sha256={}".format(stock_hash))
-    print("release_dtb_sha256={}".format(hashlib.sha256(output).hexdigest()))
-    if not args.preserve_secure_mode:
-        print("release_dtb_patch={}:secure-mode->FDT_NOP".format(SPI_PATH))
-    for sensor_path in UNUSED_SENSOR_PATHS:
-        print("release_dtb_patch={}:status=okay->fail".format(sensor_path))
-    print("release_dtb_changed_bytes={}".format(changed_bytes))
+    print("mback_dtb_sha256={}".format(hashlib.sha256(output).hexdigest()))
+    print("mback_dtb_patch={}:secure-mode->FDT_NOP".format(SPI_PATH))
+    print("mback_dtb_changed_bytes={}".format(changed_bytes))
 
 
 if __name__ == "__main__":
