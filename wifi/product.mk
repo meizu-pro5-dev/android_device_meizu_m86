@@ -4,7 +4,8 @@
 M86_WIFI_PATH := device/meizu/m86/wifi
 
 # The PCIe bcmdhd driver is built into the m86 kernel. Android 10's legacy
-# HIDL service owns Wi-Fi, hostapd and supplicant without Samsung wifiloader or
+# HIDL service owns the legacy Wi-Fi chip HAL. Android 13's AIDL hostapd and
+# supplicant frontends use the same bcmdhd driver without Samsung wifiloader or
 # an /efs macloader side channel.
 PRODUCT_PACKAGES += \
     android.hardware.wifi@1.0-service.legacy \
