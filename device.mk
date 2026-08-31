@@ -156,23 +156,12 @@ PRODUCT_PACKAGES += \
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/sensors/android.hardware.sensors@1.0-service.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/android.hardware.sensors@1.0-service.rc
 
-# Camera. The 32-bit provider loads the m86-owned module selected by the
-# product. Keep the mutually exclusive engines out of images that do not use
-# them; the compatibility shim remains available to both donor and source
-# implementations.
+# Camera. The 32-bit provider loads the m86-owned native Exynos HAL3 module.
 PRODUCT_PACKAGES += \
     android.hardware.camera.provider@2.4-impl \
     android.hardware.camera.provider@2.4-service.m86 \
     camera.m86 \
-    libm86camera_shim
-
-ifeq ($(M86_USE_PREBUILT_EXYNOS_HAL3),true)
-PRODUCT_PACKAGES += libm86camera3_bridge
-else ifeq ($(M86_USE_NATIVE_EXYNOS_HAL3),true)
-PRODUCT_PACKAGES += libexynoscamera3_m86
-else
-PRODUCT_PACKAGES += libexynoscamera_m86
-endif
+    libexynoscamera3_m86
 
 # Vibrator. The maintained Meizu kernel exposes the standard timed-output
 # interface used by Android's source-built legacy module; the HIDL service

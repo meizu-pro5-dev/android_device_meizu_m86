@@ -63,7 +63,6 @@ lib/extend/libExtractor.REALMEDIA.so
 lib/extend/libExtractor.WAV.so
 lib/extend/libExtractor.matroska.so
 lib/hw/audio.primary.m86.so
-lib/hw/camera.m86.so
 lib/hw/dis_effect.m86.so
 lib/hw/gralloc.exynos5.so
 lib/hw/hwcomposer.exynos5.so
@@ -78,7 +77,6 @@ lib/libarcsoft_makeup.so
 lib/libcam.common.meizu.platform.so
 lib/libdis_core.so
 lib/libdisplay.so
-lib/libexynoscamera.so
 lib/libexynosgscaler.so
 lib/libexynosscaler.so
 lib/libexynosutils.so
@@ -86,7 +84,6 @@ lib/libexynosv4l2.so
 lib/libfilter_effects.so
 lib/libhdmi.so
 lib/libhwcutils.so
-lib/libhwjpeg.so
 lib/libimageproc.so
 lib/libion.so
 lib/libmakeup_style.so
@@ -114,16 +111,6 @@ lib/soundfx/libbundlewrapper.so
 lib/soundfx/libdownmix.so
 lib/soundfx/libldnhncr.so
 
-# Route A: checked universal7420 donor Camera3 stack. Import and patch these
-# with hardware/meizu/m86/camera/prebuilt3_route_a/import-route-a-blobs.sh;
-# they are not present in the original M86 image.
-vendor/lib/hw/camera.vendor.exynos5.so
-vendor/lib/libexynoscamera.so
-vendor/lib/libexynoscamera3.so
-vendor/lib/libhwjpeg.so
-vendor/lib/libsecnativefeature.so
-vendor/lib/libsensorlistener.so
-vendor/lib/libuniplugin.so
 lib64/extend/libCodec.adpcmdec.so
 lib64/extend/libCodec.adt.so
 lib64/extend/libCodec.lpcm.so
@@ -159,7 +146,6 @@ lib64/libexynosutils.so
 lib64/libexynosv4l2.so
 lib64/libhdmi.so
 lib64/libhwcutils.so
-lib64/libhwjpeg.so
 lib64/libimageproc.so
 lib64/libion.so
 lib64/libmeizucamera.so

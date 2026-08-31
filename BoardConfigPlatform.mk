@@ -61,13 +61,8 @@ BOARD_USES_VIRTUAL_DISPLAY_DECON_EXT_WB := false
 BOARD_USE_VIDEO_EXT_FOR_WFD_DRM := false
 BOARD_USES_VDS_BGRA8888 := true
 BOARD_VIRTUAL_DISPLAY_DISABLE_IDMA_G0 := false
-# Route A installs the donor's original libhwjpeg.so and must be its sole
-# owner. Other camera variants retain the source universal implementation.
-ifeq ($(M86_USE_PREBUILT_EXYNOS_HAL3),true)
-TARGET_USES_UNIVERSAL_LIBHWJPEG := false
-else
+# Native HAL3 uses the source universal JPEG implementation.
 TARGET_USES_UNIVERSAL_LIBHWJPEG := true
-endif
 BOARD_USES_SKIA_FIMGAPI := true
 BOARD_USES_FIMGAPI_V5X := true
 BOARD_USES_DEFAULT_CSC_HW_SCALER := true

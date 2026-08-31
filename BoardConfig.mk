@@ -17,17 +17,7 @@ BOARD_VENDOR := meizu
 # matches every required m86 TFA/SITRIL dependency.
 AUDIOSERVER_MULTILIB := 32
 
-# Route A carries explicit DT_NEEDED entries for its ABI shim and never loads
-# the Flyme libexynoscamera path. Preserve the path-scoped stock rule only for
-# rollback products that select the Flyme engine.
-ifneq ($(M86_USE_PREBUILT_EXYNOS_HAL3),true)
-ifneq ($(M86_USE_NATIVE_EXYNOS_HAL3),true)
 TARGET_LD_SHIM_LIBS := \
-    /system/lib/libexynoscamera.so|/system/lib/libm86camera_shim.so
-endif
-endif
-
-TARGET_LD_SHIM_LIBS += \
     /system/bin/gpsd|/system/lib64/libm86gps_shim.so \
     /system/lib64/libril_sitril.so|/system/lib64/libm86cutils_sitril_shim.so
 

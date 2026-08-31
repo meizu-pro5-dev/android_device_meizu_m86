@@ -8,10 +8,7 @@
 # one of these flags false before inheriting this product definition.
 M86_ENABLE_NFC_EXPERIMENT ?= true
 M86_ENABLE_FINGERPRINT_EXPERIMENT ?= true
-# Route D builds the m86-owned Camera3 module and engine from source.  Route A
-# remains in history as a donor-analysis checkpoint, not as a product runtime.
-M86_USE_NATIVE_EXYNOS_HAL3 ?= true
-M86_USE_PREBUILT_EXYNOS_HAL3 ?= false
+# Camera is always provided by the m86-owned native Exynos HAL3 stack.
 
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base_telephony.mk)
