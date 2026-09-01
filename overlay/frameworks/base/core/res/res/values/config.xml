@@ -1,5 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
 <resources>
+    <!--
+         Meizu PRO 5 Samsung S6E3FA3 AMOLED brightness contract.
+
+         The panel driver accepts the complete 0..255 DCS brightness range and
+         identifies code 68 as its 60-nit default. Independent full-white
+         measurements place sustainable maximum luminance near 328 nits.
+         Intermediate control points use a monotonic fit through those two
+         anchors. HBM is deliberately excluded from this normal-mode mapping.
+    -->
+    <integer-array name="config_screenBrightnessBacklight">
+        <item>0</item>
+        <item>1</item>
+        <item>4</item>
+        <item>8</item>
+        <item>16</item>
+        <item>32</item>
+        <item>68</item>
+        <item>96</item>
+        <item>128</item>
+        <item>160</item>
+        <item>192</item>
+        <item>224</item>
+        <item>255</item>
+    </integer-array>
+
+    <array name="config_screenBrightnessNits">
+        <item>0.0</item>
+        <item>1.0</item>
+        <item>1.57</item>
+        <item>3.82</item>
+        <item>9.32</item>
+        <item>22.73</item>
+        <item>60.0</item>
+        <item>93.38</item>
+        <item>135.19</item>
+        <item>180.12</item>
+        <item>227.71</item>
+        <item>277.64</item>
+        <item>328.0</item>
+    </array>
+
     <!-- bcmdhd uses wlan0 for both station and SoftAP operation. -->
     <string-array translatable="false" name="config_tether_wifi_regexs">
         <item>"wlan0"</item>
