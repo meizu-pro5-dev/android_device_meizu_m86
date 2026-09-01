@@ -6,7 +6,7 @@ on early-init
     mount debugfs debugfs /sys/kernel/debug mode=755
     # Match Flyme's compressed-memory policy without enabling UFS swap.
     write /proc/sys/vm/page-cluster 0
-    write /proc/sys/vm/swappiness 65
+    write /proc/sys/vm/swappiness 100
 
 on fs
     mount_all /fstab.m86
@@ -45,7 +45,7 @@ on boot
     # kernel thermal drivers retain the final frequency ceiling.
     write /sys/devices/system/cpu/cpu0/cpufreq/interactive/target_loads 75
     write /sys/devices/system/cpu/cpu0/cpufreq/interactive/min_sample_time 40000
-    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/hispeed_freq 900000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/hispeed_freq 1200000
     write /sys/devices/system/cpu/cpu0/cpufreq/interactive/go_hispeed_load 85
     write /sys/devices/system/cpu/cpu0/cpufreq/interactive/above_hispeed_delay 19000
     write /sys/devices/system/cpu/cpu0/cpufreq/interactive/timer_rate 20000
@@ -53,7 +53,7 @@ on boot
     write /sys/devices/system/cpu/cpu0/cpufreq/interactive/boostpulse_duration 40000
     write /sys/devices/system/cpu/cpu4/cpufreq/interactive/target_loads "80 1000000:81 1400000:87 1700000:90"
     write /sys/devices/system/cpu/cpu4/cpufreq/interactive/min_sample_time 40000
-    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/hispeed_freq 1000000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/hispeed_freq 1700000
     write /sys/devices/system/cpu/cpu4/cpufreq/interactive/go_hispeed_load 89
     write /sys/devices/system/cpu/cpu4/cpufreq/interactive/above_hispeed_delay "59000 1200000:119000 1700000:19000"
     write /sys/devices/system/cpu/cpu4/cpufreq/interactive/timer_rate 20000
