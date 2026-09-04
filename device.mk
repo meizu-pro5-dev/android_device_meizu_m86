@@ -62,6 +62,13 @@ PRODUCT_COPY_FILES += \
 # system) cannot open the Mali DDK device.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/etc/ueventd.m86.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc
+
+# Android's full eBPF networking stack uses a controller-less cgroup2 hierarchy.
+# universal7420-common is not inherited as a product, so install the m86-owned
+# descriptor explicitly at the vendor path consumed by libprocessgroup.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/configs/cgroups.json:$(TARGET_COPY_OUT_VENDOR)/etc/cgroups.json
+
 # Minimum feature declaration for the first boot/recovery milestone.
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:system/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
