@@ -20,7 +20,11 @@ fi
 # shellcheck source=/dev/null
 source "$helper"
 
-clean_vendor=true
+# Keep the checked-in vendor definitions by default. They exclude platform
+# blobs replaced by source modules and preserve audited destination renames
+# which this branch's extract-utils generator cannot reproduce.
+clean_vendor=false
+regenerate_makefiles=false
 section=""
 source_path="adb"
 
@@ -28,6 +32,9 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -n | --no-cleanup)
       clean_vendor=false
+      ;;
+    --regenerate-makefiles)
+      regenerate_makefiles=true
       ;;
     -s | --section)
       if [[ $# -lt 2 ]]; then
@@ -58,4 +65,12 @@ setup_vendor \
   "$device"
 extract "$script_dir/proprietary-files.txt" "$source_path" "$section"
 set -u
-"$script_dir/setup-makefiles.sh"
+
+if [[ "$regenerate_makefiles" == true ]]; then
+  printf '%s\n' \
+    'WARNING: regenerating vendor makefiles; review source-owned replacements and destination renames afterwards.' >&2
+  "$script_dir/setup-makefiles.sh"
+else
+  printf '%s\n' \
+    'Preserved checked-in vendor makefiles (use --regenerate-makefiles to replace them).'
+fi
