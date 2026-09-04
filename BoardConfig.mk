@@ -73,12 +73,13 @@ TARGET_KERNEL_ARCH := arm64
 TARGET_KERNEL_HEADER_ARCH := arm64
 TARGET_KERNEL_SOURCE := kernel/meizu/m86
 # The integrated/default product and the fingerprint-only rollback product use
-# the secure-world FPC path. The NFC-only rollback retains raw navigation.
+# the main secure-world FPC configuration. The NFC-only rollback retains its
+# explicitly named raw-navigation configuration.
 ifeq ($(M86_ENABLE_FINGERPRINT_EXPERIMENT),true)
-TARGET_KERNEL_CONFIG := cm_pro5_fingerprint_experiment_defconfig
+TARGET_KERNEL_CONFIG := cm_pro5_defconfig
 M86_FPC_BACKEND := tee
 else
-TARGET_KERNEL_CONFIG := cm_pro5_defconfig
+TARGET_KERNEL_CONFIG := cm_pro5_raw_navigation_defconfig
 M86_FPC_BACKEND := raw-navigation
 endif
 TARGET_LINUX_KERNEL_VERSION := 3.10

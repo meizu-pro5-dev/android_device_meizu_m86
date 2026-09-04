@@ -66,6 +66,13 @@ PRODUCT_COPY_FILES += \
 # system) cannot open the Mali DDK device.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/etc/ueventd.m86.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc
+
+# Android 13's networking BPF programs attach to the controller-less cgroup2
+# hierarchy. Keep the vendor descriptor on the canonical path consumed by
+# libprocessgroup and netd; initialization failures remain fatal with BPF on.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/configs/cgroups.json:$(TARGET_COPY_OUT_VENDOR)/etc/cgroups.json
+
 # Minimum feature declaration for the first boot/recovery milestone.
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:system/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
