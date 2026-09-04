@@ -30,8 +30,6 @@ ro.hardware.hifi.support=true
 
 # Storage
 persist.sys.isolated_storage=false
-# Android 12 netd on the 3.10 kernel: keep the legacy qtaguid path.
-ro.kernel.ebpf.supported=false
 # M1 bring-up keeps adb reachable over USB by default.
 persist.sys.usb.config=adb
 # Keep the device default outside /data/property so a stale value written by
