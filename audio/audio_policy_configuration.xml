@@ -61,7 +61,7 @@
             </routes>
         </module>
 
-        <xi:include href="/vendor/etc/a2dp_audio_policy_configuration.xml"/>
+        <xi:include href="/vendor/etc/bluetooth_audio_policy_configuration.xml"/>
         <xi:include href="/vendor/etc/usb_audio_policy_configuration.xml"/>
         <xi:include href="/vendor/etc/r_submix_audio_policy_configuration.xml"/>
     </modules>

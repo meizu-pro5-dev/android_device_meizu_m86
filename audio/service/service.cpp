@@ -68,6 +68,10 @@ int main(int /* argc */, char* /* argv */[]) {
             "android.hardware.audio.effect@5.0::IEffectsFactory",
             "android.hardware.audio.effect@4.0::IEffectsFactory",
         },
+        {
+            "Bluetooth Audio API",
+            "android.hardware.bluetooth.audio@2.0::IBluetoothAudioProvidersFactory",
+        },
     };
 
     const std::vector<InterfacesList> optionalInterfaces = {
@@ -77,12 +81,6 @@ int main(int /* argc */, char* /* argv */[]) {
             "android.hardware.soundtrigger@2.2::ISoundTriggerHw",
             "android.hardware.soundtrigger@2.1::ISoundTriggerHw",
             "android.hardware.soundtrigger@2.0::ISoundTriggerHw",
-        },
-        {
-            "Bluetooth Audio API",
-            "android.hardware.bluetooth.audio@2.2::IBluetoothAudioProvidersFactory",
-            "android.hardware.bluetooth.audio@2.1::IBluetoothAudioProvidersFactory",
-            "android.hardware.bluetooth.audio@2.0::IBluetoothAudioProvidersFactory",
         },
         {
             "Bluetooth Audio Offload API",
