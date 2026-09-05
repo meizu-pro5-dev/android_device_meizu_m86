@@ -199,6 +199,12 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     android.hardware.power-service.m86
 
+# Report the existing TMU through the standard HAL; kernel thermal mitigation
+# remains authoritative. Do not install the optional thermal logging daemon.
+PRODUCT_PACKAGES += android.hardware.thermal@2.0-service.samsung
+PRODUCT_COPY_FILES += \
+    device/meizu/m86/thermal/thermal_info_config.json:$(TARGET_COPY_OUT_VENDOR)/etc/thermal_info_config.json
+
 # Android 12 BatteryService requires a registered IHealth HIDL service.
 # The AOSP default reads the m86 power-supply uevents through libbatterymonitor.
 PRODUCT_PACKAGES += \

@@ -1,0 +1,14 @@
+{
+    "Sensors": [
+        {
+            "Name": "exynos-therm",
+            "Type": "CPU",
+            "HotThreshold": ["NAN", 75.0, 80.0, 85.0, 90.0, 95.0, "NAN"],
+            "HotHysteresis": [0.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0],
+            "VrThreshold": "NAN",
+            "Multiplier": 0.001,
+            "Monitor": false
+        }
+    ],
+    "CoolingDevices": []
+}
