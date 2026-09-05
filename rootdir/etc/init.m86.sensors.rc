@@ -1,6 +1,8 @@
 # Permissions reproduced from the final Flyme 8 m86 ramdisk for the CyWee
 # sensor hub and the separate Meizu ambient-light/proximity drivers.
-on boot
+# The CyWee constructor opens IIO only once and returns before initializing
+# its sysfs paths on failure. Set DAC before init starts class hal on boot.
+on post-fs-data
     chown system system /sys/class/meizu/mx_hub/batch
     chmod 0660 /sys/class/meizu/mx_hub/batch
     chown system system /sys/class/meizu/mx_hub/calibrator_cmd
