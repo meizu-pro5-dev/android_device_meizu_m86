@@ -76,3 +76,7 @@ BOARD_USES_SCALER_M2M1SHOT := true
 # codec reads the same private_handle_t layout that allocated the buffer.
 BOARD_EXYNOS_OMX_GRALLOC_PRIV_INCLUDE := \
     hardware/meizu/m86/graphics/gralloc/a10-contract
+
+# m86 gralloc can lock ordinary NV12M, but not the private-metadata variant.
+# Select ordinary output while retaining recognition of private input buffers.
+BOARD_EXYNOS_OMX_USE_NONPRIVATE_NV12 := true
