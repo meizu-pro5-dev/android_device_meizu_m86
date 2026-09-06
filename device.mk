@@ -221,3 +221,6 @@ $(call inherit-product-if-exists, vendor/meizu/m86/m86-vendor.mk)
 
 # Pull in the Android 13 SLSI namespace contract used by the 7420 BSP.
 $(call inherit-product, hardware/samsung_slsi-linaro/config/config.mk)
+
+# Compile system application methods on the build host for the full-preopt test.
+PRODUCT_DEX_PREOPT_DEFAULT_FLAGS += --compiler-filter=speed -j2
