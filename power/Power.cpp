@@ -19,12 +19,8 @@ namespace {
 
 constexpr char kCpu0BoostPulse[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/interactive/boostpulse";
-constexpr char kCpu4BoostPulse[] =
-    "/sys/devices/system/cpu/cpu4/cpufreq/interactive/boostpulse";
 constexpr char kCpu0BoostDuration[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/interactive/boostpulse_duration";
-constexpr char kCpu4BoostDuration[] =
-    "/sys/devices/system/cpu/cpu4/cpufreq/interactive/boostpulse_duration";
 constexpr char kHmpBoostPulse[] = "/sys/kernel/hmp/boostpulse";
 constexpr char kHmpBoostDuration[] = "/sys/kernel/hmp/boostpulse_duration";
 constexpr char kHotplugProfile[] =
@@ -33,8 +29,6 @@ constexpr char kHotplugBigCluster[] =
     "/sys/module/exynos_march_cpu_hotplug/parameters/cl1_booster";
 constexpr char kHotplugBigMinimum[] =
     "/sys/module/exynos_march_cpu_hotplug/parameters/min_cpu_boosted";
-constexpr char kHotplugInteraction[] =
-    "/sys/module/exynos_march_cpu_hotplug/parameters/interaction_boost";
 constexpr char kGpuDvfsMinLock[] =
     "/sys/devices/14ac0000.mali/dvfs_min_lock";
 constexpr char kGpuDvfsMaxLock[] =
@@ -42,21 +36,13 @@ constexpr char kGpuDvfsMaxLock[] =
 
 constexpr char kProfileHigh[] = "0";
 constexpr char kProfileEco[] = "2";
-constexpr char kBigMinimumHigh[] = "2";
 constexpr char kLittleBoostDurationUs[] = "80000";
-constexpr char kBigBoostDurationUs[] = "400000";
-constexpr char kBigLaunchBoostDurationUs[] = "600000";
 constexpr char kDisplayBoostDurationUs[] = "120000";
 constexpr char kHmpInteractionDurationUs[] = "250000";
 constexpr char kHmpLaunchDurationUs[] = "500000";
 constexpr char kGpuUnlock[] = "0";
 constexpr char kGpuFloorRendering[] = "420";
-constexpr char kGpuFloorDisplayUpdate[] = "544";
-constexpr char kGpuFloorHigh[] = "700";
-constexpr unsigned int kGpuDisplayUpdateMs = 100;
-constexpr unsigned int kGpuInteractionHighMs = 500;
-constexpr unsigned int kGpuInteractionMs = 800;
-constexpr unsigned int kGpuLaunchMs = 1300;
+constexpr char kGpuCeilingLimited[] = "544";
 
 int WriteNode(const char* path, const char* value) {
   int fd = TEMP_FAILURE_RETRY(open(path, O_WRONLY | O_CLOEXEC));
@@ -80,8 +66,9 @@ int WriteNode(const char* path, const char* value) {
 
 void SendBoostPulse(const char* duration_path, const char* pulse_path,
                     const char* duration_us) {
-  WriteNode(duration_path, duration_us);
-  WriteNode(pulse_path, "1");
+  if (WriteNode(duration_path, duration_us) == 0) {
+    WriteNode(pulse_path, "1");
+  }
 }
 
 }  // namespace
@@ -89,38 +76,13 @@ void SendBoostPulse(const char* duration_path, const char* pulse_path,
 Power::Power() {
   std::lock_guard<std::mutex> guard(lock_);
   WriteNode(kCpu0BoostDuration, kLittleBoostDurationUs);
-  WriteNode(kGpuDvfsMinLock, kGpuUnlock);
-  WriteNode(kGpuDvfsMaxLock, kGpuUnlock);
   ApplyPowerProfileLocked(false);
-  applied_gpu_floor_ = kGpuUnlock;
-  applied_gpu_ceiling_ = kGpuUnlock;
-  gpu_thread_ = std::thread(&Power::GpuBoostWorker, this);
-}
-
-Power::~Power() {
-  {
-    std::lock_guard<std::mutex> guard(lock_);
-    stop_worker_ = true;
-    gpu_cond_.notify_all();
-  }
-  if (gpu_thread_.joinable()) {
-    gpu_thread_.join();
-  }
 }
 
 void Power::ApplyGpuFloorLocked() {
-  const char* floor = kGpuUnlock;
-
-  if (interactive_ && !display_inactive_) {
-    if (interaction_high_boost_ || display_update_boost_) {
-      floor = low_power_ ? kGpuFloorRendering : kGpuFloorHigh;
-    } else if (interaction_boost_) {
-      floor = low_power_ ? kGpuFloorRendering
-                         : kGpuFloorDisplayUpdate;
-    } else if (expensive_rendering_) {
-      floor = kGpuFloorRendering;
-    }
-  }
+  const char* floor = interactive_ && !display_inactive_ && expensive_rendering_
+                          ? kGpuFloorRendering
+                          : kGpuUnlock;
 
   if (applied_gpu_floor_ == nullptr || strcmp(applied_gpu_floor_, floor) != 0) {
     if (WriteNode(kGpuDvfsMinLock, floor) == 0) {
@@ -131,85 +93,12 @@ void Power::ApplyGpuFloorLocked() {
 
 void Power::ApplyGpuCeilingLocked() {
   const char* ceiling =
-      (low_power_ || sustained_performance_) ? kGpuFloorDisplayUpdate
-                                             : kGpuUnlock;
+      (low_power_ || sustained_performance_) ? kGpuCeilingLimited : kGpuUnlock;
 
   if (applied_gpu_ceiling_ == nullptr ||
       strcmp(applied_gpu_ceiling_, ceiling) != 0) {
     if (WriteNode(kGpuDvfsMaxLock, ceiling) == 0) {
       applied_gpu_ceiling_ = ceiling;
-    }
-  }
-}
-
-void Power::CancelInteractionBoostLocked() {
-  interaction_boost_ = false;
-  interaction_high_boost_ = false;
-  interaction_deadline_ = TimePoint{};
-  interaction_high_deadline_ = TimePoint{};
-  ApplyGpuFloorLocked();
-}
-
-void Power::CancelDisplayUpdateBoostLocked() {
-  display_update_boost_ = false;
-  display_update_deadline_ = TimePoint{};
-  ApplyGpuFloorLocked();
-}
-
-void Power::CancelGpuBoostsLocked() {
-  interaction_boost_ = false;
-  interaction_high_boost_ = false;
-  display_update_boost_ = false;
-  interaction_deadline_ = TimePoint{};
-  interaction_high_deadline_ = TimePoint{};
-  display_update_deadline_ = TimePoint{};
-  ApplyGpuFloorLocked();
-}
-
-void Power::GpuBoostWorker() {
-  std::unique_lock<std::mutex> lock(lock_);
-
-  while (!stop_worker_) {
-    gpu_cond_.wait(lock, [this] {
-      return stop_worker_ || interaction_boost_ || display_update_boost_;
-    });
-    if (stop_worker_) {
-      break;
-    }
-
-    TimePoint deadline = interaction_boost_ ? interaction_deadline_
-                                            : display_update_deadline_;
-    if (display_update_boost_ && display_update_deadline_ < deadline) {
-      deadline = display_update_deadline_;
-    }
-    if (interaction_high_boost_ && interaction_high_deadline_ < deadline) {
-      deadline = interaction_high_deadline_;
-    }
-    if (gpu_cond_.wait_until(lock, deadline) != std::cv_status::timeout) {
-      continue;
-    }
-
-    const auto now = std::chrono::steady_clock::now();
-    bool changed = false;
-    if (interaction_boost_ && interaction_deadline_ <= now) {
-      interaction_boost_ = false;
-      interaction_high_boost_ = false;
-      interaction_deadline_ = TimePoint{};
-      interaction_high_deadline_ = TimePoint{};
-      changed = true;
-    } else if (interaction_high_boost_ &&
-               interaction_high_deadline_ <= now) {
-      interaction_high_boost_ = false;
-      interaction_high_deadline_ = TimePoint{};
-      changed = true;
-    }
-    if (display_update_boost_ && display_update_deadline_ <= now) {
-      display_update_boost_ = false;
-      display_update_deadline_ = TimePoint{};
-      changed = true;
-    }
-    if (changed) {
-      ApplyGpuFloorLocked();
     }
   }
 }
@@ -222,51 +111,33 @@ void Power::SendDisplayUpdateBoostLocked() {
   if (!low_power_) {
     SendBoostPulse(kHmpBoostDuration, kHmpBoostPulse,
                    kDisplayBoostDurationUs);
-    SendBoostPulse(kCpu4BoostDuration, kCpu4BoostPulse,
-                   kDisplayBoostDurationUs);
   }
-
-  const auto now = std::chrono::steady_clock::now();
-  display_update_boost_ = true;
-  display_update_deadline_ =
-      now + std::chrono::milliseconds(kGpuDisplayUpdateMs);
-  ApplyGpuFloorLocked();
-  gpu_cond_.notify_all();
 }
 
 void Power::SendInteractionBoostLocked(bool launch) {
+  if (!launch && (!interactive_ || display_inactive_)) {
+    return;
+  }
   if (!low_power_) {
-    WriteNode(kHotplugInteraction, "1");
     SendBoostPulse(kHmpBoostDuration, kHmpBoostPulse,
                    launch ? kHmpLaunchDurationUs
                           : kHmpInteractionDurationUs);
-    SendBoostPulse(kCpu4BoostDuration, kCpu4BoostPulse,
-                   launch ? kBigLaunchBoostDurationUs
-                          : kBigBoostDurationUs);
   }
   WriteNode(kCpu0BoostPulse, "1");
-
-  if (!interactive_ || display_inactive_) {
-    return;
-  }
-
-  const unsigned int gpu_ms = launch ? kGpuLaunchMs : kGpuInteractionMs;
-  const auto now = std::chrono::steady_clock::now();
-  interaction_boost_ = true;
-  interaction_high_boost_ = true;
-  interaction_high_deadline_ =
-      now + std::chrono::milliseconds(kGpuInteractionHighMs);
-  interaction_deadline_ = now + std::chrono::milliseconds(gpu_ms);
-  ApplyGpuFloorLocked();
-  gpu_cond_.notify_all();
 }
 
 void Power::ApplyPowerProfileLocked(bool low_power) {
-  WriteNode(kHotplugProfile, low_power ? kProfileEco : kProfileHigh);
-  WriteNode(kHotplugBigCluster, low_power ? "0" : "1");
-  WriteNode(kHotplugBigMinimum, low_power ? "0" : kBigMinimumHigh);
+  const int profile_error =
+      WriteNode(kHotplugProfile, low_power ? kProfileEco : kProfileHigh);
+  const int cluster_error = WriteNode(kHotplugBigCluster, low_power ? "0" : "1");
+  // Let March choose the big-core count without a forced minimum.
+  const int error = WriteNode(kHotplugBigMinimum, "0");
+  if (error != 0) {
+    ALOGW("Cannot reset %s to 0: %s", kHotplugBigMinimum, strerror(-error));
+  }
 
   low_power_ = low_power;
+  profile_applied_ = profile_error == 0 && cluster_error == 0 && error == 0;
   ApplyGpuCeilingLocked();
   ApplyGpuFloorLocked();
 }
@@ -276,7 +147,7 @@ ndk::ScopedAStatus Power::setMode(Mode type, bool enabled) {
 
   switch (type) {
     case Mode::LOW_POWER:
-      if (low_power_ != enabled) {
+      if (low_power_ != enabled || !profile_applied_) {
         ApplyPowerProfileLocked(enabled);
       }
       break;
@@ -295,21 +166,11 @@ ndk::ScopedAStatus Power::setMode(Mode type, bool enabled) {
       break;
     case Mode::INTERACTIVE:
       interactive_ = enabled;
-      if (!enabled) {
-        CancelGpuBoostsLocked();
-      } else {
-        ApplyGpuFloorLocked();
-      }
-      gpu_cond_.notify_all();
+      ApplyGpuFloorLocked();
       break;
     case Mode::DISPLAY_INACTIVE:
       display_inactive_ = enabled;
-      if (enabled) {
-        CancelGpuBoostsLocked();
-      } else {
-        ApplyGpuFloorLocked();
-      }
-      gpu_cond_.notify_all();
+      ApplyGpuFloorLocked();
       break;
     default:
       break;
@@ -340,18 +201,12 @@ ndk::ScopedAStatus Power::setBoost(Boost type, int32_t duration_ms) {
 
   switch (type) {
     case Boost::INTERACTION:
-      if (duration_ms < 0) {
-        CancelInteractionBoostLocked();
-        gpu_cond_.notify_all();
-      } else {
+      if (duration_ms >= 0) {
         SendInteractionBoostLocked(false);
       }
       break;
     case Boost::DISPLAY_UPDATE_IMMINENT:
-      if (duration_ms < 0) {
-        CancelDisplayUpdateBoostLocked();
-        gpu_cond_.notify_all();
-      } else {
+      if (duration_ms >= 0) {
         SendDisplayUpdateBoostLocked();
       }
       break;
@@ -390,17 +245,12 @@ binder_status_t Power::dump(int fd, const char** args, uint32_t num_args) {
   dprintf(fd,
           "m86 AIDL PowerHAL\n"
           "interactive=%d display_inactive=%d low_power=%d sustained=%d "
-          "expensive_rendering=%d interaction_boost=%d "
-          "interaction_high_boost=%d "
-          "display_update_boost=%d "
-          "gpu_floor=%s gpu_ceiling=%s "
-          "big_min=%s hmp_us=120000/250000/500000\n",
+          "expensive_rendering=%d gpu_floor=%s gpu_ceiling=%s "
+          "big_min_policy=0 hmp_us=120000/250000/500000\n",
           interactive_, display_inactive_, low_power_, sustained_performance_,
-          expensive_rendering_, interaction_boost_, interaction_high_boost_,
-          display_update_boost_,
+          expensive_rendering_,
           applied_gpu_floor_ == nullptr ? "unknown" : applied_gpu_floor_,
-          applied_gpu_ceiling_ == nullptr ? "unknown" : applied_gpu_ceiling_,
-          low_power_ ? "0" : kBigMinimumHigh);
+          applied_gpu_ceiling_ == nullptr ? "unknown" : applied_gpu_ceiling_);
   return STATUS_OK;
 }
 
