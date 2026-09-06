@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Build a signed M86 recovery ZIP that replaces selected /system libraries.
+Build a signed M86 recovery ZIP that replaces selected /system libraries or the m86 Power HAL.
 
 Usage:
   device/meizu/m86/tools/make-system-lib-incremental-v5.sh \
@@ -24,7 +24,7 @@ The generated installer:
   * verifies unchanged files passed with --verify;
   * reuses/remounts the active system mount and never unmounts it;
   * does not touch boot, Magisk, or files outside the system and
-    system/vendor library directories.
+    system/vendor library directories or the exact m86 Power HAL executable.
 
 NAME must contain only lowercase letters, digits, and dashes. SOURCE and output
 paths may be relative to the Android source root. Run the tool from any path
@@ -81,7 +81,8 @@ validate_target() {
     local target="$1"
     case "$target" in
         /system/lib/*|/system/lib64/*|/system/vendor/lib/*|/system/vendor/lib64/*) ;;
-        *) die "target must be below a system or system/vendor lib directory: $target" ;;
+        /system/vendor/bin/hw/android.hardware.power-service.m86) ;;
+        *) die "target must be a system library or the exact m86 Power HAL executable: $target" ;;
     esac
     [[ "$target" != *".."* && "$target" != *"|"* && "$target" != *[[:space:]]* ]] ||
         die "unsafe target path: $target"
@@ -205,7 +206,10 @@ for spec in "${payload_specs[@]}"; do
     destination="$package_root/payload/system/$relative"
     mkdir -p "$(dirname "$destination")"
     cp "$source" "$destination"
-    chmod 0644 "$destination"
+    case "$relative" in
+        vendor/bin/hw/android.hardware.power-service.m86) chmod 0755 "$destination" ;;
+        *) chmod 0644 "$destination" ;;
+    esac
     printf 'P|%s|%s|%s\n' "$relative" "${base_sha,,}" "$new_sha" >> "$manifest"
     payload_rows+=("$target|${base_sha,,}|$new_sha|$source")
 done
@@ -321,6 +325,14 @@ if ! find_system_content_root; then
     find_system_content_root || exit 22
 fi
 
+# Power HAL replacement requires hash verification and its executable label.
+while IFS='|' read -r kind relative base_sha new_sha; do
+    if [ "$relative" = "vendor/bin/hw/android.hardware.power-service.m86" ]; then
+        command -v sha256sum >/dev/null 2>&1 || exit 38
+        command -v chcon >/dev/null 2>&1 || exit 39
+    fi
+done < "$manifest"
+
 # Validate every installed base and every payload before remounting writable.
 while IFS='|' read -r kind relative base_sha new_sha; do
     target="$system_content_root/$relative"
@@ -364,9 +376,16 @@ while IFS='|' read -r kind relative base_sha new_sha; do
     temporary="$target.m86-incremental-v5.new.$$"
     cp "$source" "$temporary" || exit 31
     chown 0:0 "$temporary" || exit 32
-    chmod 0644 "$temporary" || exit 33
+    case "$relative" in
+        vendor/bin/hw/android.hardware.power-service.m86) target_mode=0755 ;;
+        *) target_mode=0644 ;;
+    esac
+    chmod "$target_mode" "$temporary" || exit 33
     if command -v chcon >/dev/null 2>&1; then
         case "$relative" in
+            vendor/bin/hw/android.hardware.power-service.m86)
+                target_context=u:object_r:hal_power_default_exec:s0
+                ;;
             vendor/lib/*|vendor/lib64/*)
                 target_context=u:object_r:vendor_file:s0
                 ;;
@@ -420,7 +439,7 @@ assert(getprop("ro.product.device") == "m86" ||
 
 ui_print("$safe_title");
 ui_print("Required base: $safe_base_label");
-ui_print("Replacing ${#payload_rows[@]} system library file(s)");
+ui_print("Replacing ${#payload_rows[@]} system file(s)");
 ui_print("Verifying ${#verify_rows[@]} unchanged dependency file(s)");
 ui_print("Boot image, vendor partition and Magisk are left untouched");
 ui_print("v5 mount logic: reuse system and never unmount it");
@@ -503,7 +522,7 @@ idsig_sha="$(sha256_file "$idsig")"
     printf -- '- `%s.idsig`: `%s`\n' "$zip_name" "$idsig_sha"
     printf '\n## Scope and validation\n\n'
     printf '%s\n' '- Reuses/remounts the active system mount and never unmounts it.'
-    printf '%s\n' '- Does not modify boot, the vendor partition, Magisk, or files outside the declared system library directories.'
+    printf '%s\n' '- Does not modify boot, the vendor partition, Magisk, or files outside the declared system library directories and the exact m86 Power HAL executable.'
     printf '%s\n' '- Validates base hashes, payload hashes, shell syntax, ZIP integrity, payload count, APK Signature Block, and v4 idsig.'
     if [[ ${#test_notes[@]} -gt 0 ]]; then
         printf '\n## Device validation notes\n\n'
