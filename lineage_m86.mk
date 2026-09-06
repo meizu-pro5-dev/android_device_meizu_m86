@@ -13,6 +13,17 @@ M86_ENABLE_FINGERPRINT_EXPERIMENT ?= true
 M86_USE_NATIVE_EXYNOS_HAL3 ?= true
 M86_USE_PREBUILT_EXYNOS_HAL3 ?= false
 
+include device/meizu/m86/gpu-config.mk
+
+ifeq ($(M86_GPU_DDK),r22p0)
+ifneq ($(M86_USE_NATIVE_EXYNOS_HAL3),true)
+$(error m86 r22p0 requires the source-owned native HAL3 camera)
+endif
+ifeq ($(M86_USE_PREBUILT_EXYNOS_HAL3),true)
+$(error m86 r22p0 cannot use the old prebuilt camera handle ABI)
+endif
+endif
+
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base_telephony.mk)
 

@@ -40,3 +40,10 @@ write_headers
 write_makefiles "$script_dir/proprietary-files.txt" true
 write_footers
 set -u
+
+# Keep extracted Flyme r15 inputs intact. r22 libraries are hash-locked local
+# inputs staged separately; the product selector chooses the matching pair.
+sed -i \
+  -e 's@vendor/meizu/m86/proprietary/vendor/lib/egl/libGLES_mali.so:@vendor/meizu/m86/proprietary/$(M86_GPU_BLOB_PREFIX)vendor/lib/egl/libGLES_mali.so:@g' \
+  -e 's@vendor/meizu/m86/proprietary/vendor/lib64/egl/libGLES_mali.so:@vendor/meizu/m86/proprietary/$(M86_GPU_BLOB_PREFIX)vendor/lib64/egl/libGLES_mali.so:@g' \
+  "$lineage_root/vendor/meizu/m86/m86-vendor.mk"

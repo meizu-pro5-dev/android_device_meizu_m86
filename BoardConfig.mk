@@ -76,10 +76,10 @@ TARGET_KERNEL_SOURCE := kernel/meizu/m86
 # the main secure-world FPC configuration. The NFC-only rollback retains its
 # explicitly named raw-navigation configuration.
 ifeq ($(M86_ENABLE_FINGERPRINT_EXPERIMENT),true)
-TARGET_KERNEL_CONFIG := cm_pro5_defconfig
+TARGET_KERNEL_CONFIG := cm_pro5$(M86_GPU_KERNEL_CONFIG_SUFFIX)_defconfig
 M86_FPC_BACKEND := tee
 else
-TARGET_KERNEL_CONFIG := cm_pro5_raw_navigation_defconfig
+TARGET_KERNEL_CONFIG := cm_pro5_raw_navigation$(M86_GPU_KERNEL_CONFIG_SUFFIX)_defconfig
 M86_FPC_BACKEND := raw-navigation
 endif
 TARGET_LINUX_KERNEL_VERSION := 3.10

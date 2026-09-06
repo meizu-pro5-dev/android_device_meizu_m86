@@ -38,6 +38,7 @@ BOARD_OVERRIDE_RS_CPU_VARIANT_64 := cortex-a57
 # Lineage 20 Exynos 7420 BSP defaults (TARGET_SLSI_VARIANT=linaro,
 # TARGET_SOC_BASE=exynos7420, BOARD_HWC_VERSION=libhwc1, OpenMAX flags).
 include hardware/samsung_slsi-linaro/config/BoardConfig7420.mk
+include device/meizu/m86/gpu-config.mk
 
 # m86 overrides proven by the Android 10 integrated build.
 BOARD_USE_STOREMETADATA := true
@@ -75,7 +76,7 @@ BOARD_USES_SCALER_M2M1SHOT := true
 # gralloc0 path. Keep this include ahead of the generic SLSI headers so every
 # codec reads the same private_handle_t layout that allocated the buffer.
 BOARD_EXYNOS_OMX_GRALLOC_PRIV_INCLUDE := \
-    hardware/meizu/m86/graphics/gralloc/a10-contract
+    $(M86_GRALLOC_CONTRACT_PATH)
 
 # m86 gralloc can lock ordinary NV12M, but not the private-metadata variant.
 # Select ordinary output while retaining recognition of private input buffers.
