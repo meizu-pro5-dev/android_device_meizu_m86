@@ -12,6 +12,10 @@ M86_ENABLE_FINGERPRINT_EXPERIMENT ?= true
 # remains in history as a donor-analysis checkpoint, not as a product runtime.
 M86_USE_NATIVE_EXYNOS_HAL3 ?= true
 M86_USE_PREBUILT_EXYNOS_HAL3 ?= false
+# Requires the matching kernel OTF size and capture QoS fixes.
+ifeq ($(M86_USE_NATIVE_EXYNOS_HAL3),true)
+M86_ENABLE_CAMERA_UHD_BRINGUP ?= true
+endif
 
 include device/meizu/m86/gpu-config.mk
 

@@ -118,9 +118,15 @@ $(call inherit-product, hardware/meizu/m86/media/product.mk)
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/media/media_codecs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml \
-    $(LOCAL_PATH)/media/media_profiles.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_V1_0.xml \
     frameworks/av/media/libstagefright/data/media_codecs_google_telephony.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_google_telephony.xml \
     frameworks/av/media/libstagefright/data/media_codecs_google_video.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_google_video.xml
+
+# Keep FHD rollback builds consistent with their Camera2 stream metadata.
+ifeq ($(M86_ENABLE_CAMERA_UHD_BRINGUP),true)
+PRODUCT_COPY_FILES += $(LOCAL_PATH)/media/media_profiles_uhd.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_V1_0.xml
+else
+PRODUCT_COPY_FILES += $(LOCAL_PATH)/media/media_profiles.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_profiles_V1_0.xml
+endif
 
 # PRO5 has no usable Keymaster blob in the final Flyme dump. Use Android's
 # software Keymaster 4 implementation so keystore can start instead of
