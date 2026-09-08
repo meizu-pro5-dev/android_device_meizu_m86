@@ -22,17 +22,24 @@ constexpr char kGatekeeperDataDirectory[] = "/data/misc/gatekeeper";
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    const char* dataDirectory = kGatekeeperDataDirectory;
+    if (argc == 2 && strcmp(argv[1], "/data/vendor/gatekeeper") == 0) {
+        dataDirectory = argv[1];
+    } else if (argc != 1) {
+        ALOGE("Unsupported Gatekeeper data directory argument");
+        return 1;
+    }
     // Flyme's Exynos 7420 GateKeeperAdaptationLayer stores its retry records
     // as relative <secure_user_id>.rec paths. The generic HIDL service starts
     // in /, where its system uid cannot create them; verification then returns
     // ERROR and LockSettings cannot unwrap the synthetic password. Match the
     // legacy gatekeeperd environment before dlopen() loads gatekeeper.m86.so.
-    if (chdir(kGatekeeperDataDirectory) != 0) {
-        ALOGE("Cannot enter %s: %s", kGatekeeperDataDirectory, strerror(errno));
+    if (chdir(dataDirectory) != 0) {
+        ALOGE("Cannot enter %s: %s", dataDirectory, strerror(errno));
         return 1;
     }
 
-    ALOGI("Using legacy Gatekeeper data directory %s", kGatekeeperDataDirectory);
+    ALOGI("Using Gatekeeper data directory %s", dataDirectory);
     return defaultPassthroughServiceImplementation<IGatekeeper>();
 }

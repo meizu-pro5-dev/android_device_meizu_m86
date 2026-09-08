@@ -1,0 +1,157 @@
+{
+  "inputs": {
+    "m86-vendor.mk": "0ff6357cb21dc65d61da2a2366f98e039c6f8bfffecd97e483a2b89e70c1775e",
+    "m86-fingerprint-experiment-vendor.mk": "5aa68e9cfbbf6a6b5cc0367033dddf461a0619b132180ad9f2d6bb7853d81194",
+    "proprietary/bin/cbd": "274778d59f075ec56db8c34b9c1a237217d90064c3ad2c6b94530591cdc2f9a5",
+    "proprietary/bin/gpsd": "08621fae4bcbfe2abf18e445ba4b87681908c044061817f6c9efae0891578efe",
+    "proprietary/bin/mcDriverDaemon": "cc2604f7289ff9a4a3fb5f955eb47093be15d0cef071e9ac31fde01b2a2b36e9",
+    "proprietary/lib/hw/audio.primary.m86.so": "50e97ee55ac9408ecb0017e3dc0c0541e520e102cea0b8ec87682e51c6cadeac",
+    "proprietary/lib64/lib_fpc_tac_shared.so": "3915223313767fcd30c84b1cb41a1c975fd4fe52e90f03e7e3c082d1cdfdd09c",
+    "proprietary/lib64/libril_sitril.so": "4f856e3bcffeaf813ee6e5196289ca1b373fa6503cba714c1d42090d8274b644",
+    "proprietary/lib/libtfa9890.so": "db814dbc614ee68f28475463a05c6c10fb597b238dd863ea8b093a6f0a46318d",
+    "proprietary/lib64/libtfa9890.so": "d10482ddc330527b496e9db2fe7cf15e8603c8aba41fb4e01d4e2ce5da50b54b",
+    "proprietary/vendor/lib/libbt-vendor.so": "066a3618387bd8e3cf10a64caefdc9f3bbd92f2ef7619b667ee6633f751ebdda",
+    "proprietary/lib64/hw/gps.default.so": "0ba9bdb6ab850f95dbabb24b7b163d603e53c350140647f0ef4dfd1ddcdfe514",
+    "proprietary/lib/libsitril-audio.so": "c53d836165ab0d9d8dbc239fd86454dbfb4727001c89f1d5cdaff2390a6fb9e9",
+    "proprietary/lib/libsitril-client.so": "646cd89cf6fe0cba1f111876282c31de778e071d380c3d3d199737f0cf5cb0bb",
+    "proprietary/lib64/hw/fingerprint.m86.so": "aff55391dbc02df8657257d917ed83a56f6a19fe6a9a8834eba5e54d8df58fbe",
+    "proprietary/lib64/hw/gatekeeper.exynos7420.so": "c7c34c727ce0a5b219873c8092c9b497a264ef92f71cc90062e5a4da9079467b",
+    "proprietary/lib64/hw/sensors.m86.so": "632b4d34abc1f2cf53526d6b781edb1fa3c6b1601ee3abbbb9b5f1cb98462a85",
+    "proprietary/lib64/librilutils_sitril.so": "1930a52407232441917e65614269e1a8cea6aa164f10efa037c5226493f6e697",
+    "proprietary/lib64/libsitril-client.so": "3fa6a735fc594a65607b9a90a87d0a8c028b9a667d00719f090fd932e5ab707d",
+    "proprietary/lib64/libsitril-jniif.so": "a00ddd2afced6be16d5c36038163db446adbc3cc8fd25b028112dc039b44880f",
+    "proprietary/lib64/libsitril.so": "1d3aaad36e447c5c4e6decbf592a416dd1d01bfa8ff7f1bbec4d198c4deec306",
+    "proprietary/vendor/lib/libexynosuvs.so": "f5244928f28dc93b6407a22c45873d6c16287b896bb6d4942b1b27204babe8a0",
+    "proprietary/vendor/lib64/libMcClient.so": "5478ed12eeccd3c632464720e49c8c5b8bf1c93b3f4243ec88849c874c7be7ac",
+    "proprietary/vendor/lib64/libMcRegistry.so": "5bc270f31cc5252480c34b9bf2c7cee31d97476b72c19d2a1be5c97d749d850a",
+    "proprietary/gpu/r22p0/vendor/lib/egl/libGLES_mali.so": "9d6a02557055ec1b145269cb39f602bce102da74ae4d71bd0a6169d8a4573da9",
+    "proprietary/gpu/r22p0/vendor/lib64/egl/libGLES_mali.so": "78411f9894554e0e85bc1d4b7b4394aa3d427be86a5d50eff77b346740111a39"
+  },
+  "transforms": {
+    "bin/cbd": {
+      "strings": [
+        {
+          "from": "/system/vendor/firmware/modem.bin",
+          "to": "/vendor/firmware/modem.bin",
+          "count": 1
+        }
+      ]
+    },
+    "bin/gpsd": {
+      "strings": [
+        {
+          "from": "/system/etc/gps.conf",
+          "to": "/vendor/etc/gps.conf",
+          "count": 2
+        }
+      ],
+      "remove_needed": [
+        "libgui.so",
+        "libbinder.so",
+        "libicuuc.so"
+      ],
+      "add_needed": [
+        "libm86gps_vendor.so"
+      ]
+    },
+    "bin/mcDriverDaemon": {
+      "strings": [
+        {
+          "from": "/system/app/mcRegistry",
+          "to": "/vendor/app/mcRegistry",
+          "count": 1
+        }
+      ]
+    },
+    "lib/hw/audio.primary.m86.so": {
+      "strings": [
+        {
+          "from": "/system/etc/mixer_paths.xml",
+          "to": "/vendor/etc/mixer_paths.xml",
+          "count": 1
+        }
+      ]
+    },
+    "lib64/lib_fpc_tac_shared.so": {
+      "strings": [
+        {
+          "from": "/system/app/mcRegistry/",
+          "to": "/vendor/app/mcRegistry/",
+          "count": 2
+        }
+      ]
+    },
+    "lib64/libril_sitril.so": {
+      "add_needed": [
+        "libm86cutils_sitril_shim.so"
+      ]
+    },
+    "lib/libtfa9890.so": {
+      "strings": [
+        {
+          "from": "/etc/tfa98xx/",
+          "to": "/vendor/tfa/",
+          "count": 10
+        }
+      ]
+    },
+    "lib64/libtfa9890.so": {
+      "strings": [
+        {
+          "from": "/etc/tfa98xx/",
+          "to": "/vendor/tfa/",
+          "count": 10
+        }
+      ]
+    },
+    "vendor/lib/libbt-vendor.so": {
+      "strings": [
+        {
+          "from": "/etc/bluetooth/bt_vendor.conf",
+          "to": "/vendor/etc/bt_vendor.conf",
+          "count": 1
+        }
+      ]
+    },
+    "lib64/hw/gps.default.so": {
+      "remove_needed": [
+        "libicuuc.so"
+      ]
+    }
+  },
+  "makefiles": {
+    "m86-vendor.mk": "m86-independent-vendor.mk",
+    "m86-fingerprint-experiment-vendor.mk": "m86-fingerprint-independent-vendor.mk"
+  },
+  "excluded_copy_tokens": [
+    "/lib/extend/",
+    "/lib64/extend/",
+    "/lib/soundfx/",
+    "/lib64/soundfx/",
+    "/lib64/libskia_opt.so:",
+    "/mediadrm/libdrmclearkeyplugin.so:"
+  ],
+  "allowed_blob_sources": [
+    "bin/cbd",
+    "bin/gpsd",
+    "bin/mcDriverDaemon",
+    "lib/hw/audio.primary.m86.so",
+    "lib/libsitril-audio.so",
+    "lib/libsitril-client.so",
+    "lib/libtfa9890.so",
+    "lib64/hw/fingerprint.m86.so",
+    "lib64/hw/gatekeeper.exynos7420.so",
+    "lib64/hw/gps.default.so",
+    "lib64/hw/sensors.m86.so",
+    "lib64/lib_fpc_tac_shared.so",
+    "lib64/libril_sitril.so",
+    "lib64/librilutils_sitril.so",
+    "lib64/libsitril-client.so",
+    "lib64/libsitril-jniif.so",
+    "lib64/libsitril.so",
+    "vendor/lib/libbt-vendor.so",
+    "vendor/lib/libexynosuvs.so",
+    "vendor/lib64/libMcClient.so",
+    "vendor/lib64/libMcRegistry.so"
+  ]
+}

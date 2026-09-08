@@ -1,0 +1,32 @@
+// Copyright (C) 2026 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+cc_defaults {
+    name: "m86_gps_vendor_defaults",
+    vendor: true,
+    compile_multilib: "64",
+    srcs: ["GpsVendor.cpp"],
+    shared_libs: [
+        "android.frameworks.sensorservice@1.0",
+        "android.hardware.sensors@1.0",
+        "libhidlbase",
+        "libutils",
+        "liblog",
+        "libssl",
+    ],
+    static_libs: ["android.hardware.sensors@1.0-convert"],
+    header_libs: ["libandroid_sensor_headers"],
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+}
+
+cc_library_shared {
+    name: "libm86gps_vendor",
+    defaults: ["m86_gps_vendor_defaults"],
+}
+
+// Standalone diagnostic: listens through the framework HIDL service without
+// starting another gpsd or opening the GPS/modem devices.
+cc_binary {
+    name: "m86_gps_sensor_probe",
+    defaults: ["m86_gps_vendor_defaults"],
+    cflags: ["-DM86_GPS_SENSOR_PROBE_MAIN"],
+}

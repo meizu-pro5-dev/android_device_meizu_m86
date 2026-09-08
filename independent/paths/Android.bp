@@ -1,0 +1,10 @@
+// Copyright (C) 2026 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+cc_library_shared {
+    name: "libm86_vendor_paths",
+    vendor: true,
+    compile_multilib: "64",
+    srcs: ["VendorPaths.c"],
+    shared_libs: ["libdl"],
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+}

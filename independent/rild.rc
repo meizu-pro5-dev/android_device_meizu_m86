@@ -1,0 +1,7 @@
+service vendor.ril-daemon /vendor/bin/hw/rild
+    override
+    setenv LD_PRELOAD /vendor/lib64/libm86_vendor_paths.so
+    class main
+    user radio
+    group radio cache inet misc audio log readproc wakelock
+    capabilities BLOCK_SUSPEND NET_ADMIN NET_RAW

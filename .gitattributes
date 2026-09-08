@@ -1,0 +1,2 @@
+# Preserve context whitespace in hash-locked upstream patch payloads.
+independent/patches/*.patch -whitespace

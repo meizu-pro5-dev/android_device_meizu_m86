@@ -1,0 +1,11 @@
+<compatibility-matrix version="1.0" type="device">
+    <!-- The legacy GPS adapter uses this stable framework HIDL service. -->
+    <hal format="hidl" optional="false">
+        <name>android.frameworks.sensorservice</name>
+        <version>1.0</version>
+        <interface>
+            <name>ISensorManager</name>
+            <instance>default</instance>
+        </interface>
+    </hal>
+</compatibility-matrix>

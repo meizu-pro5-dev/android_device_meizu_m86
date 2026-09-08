@@ -1,10 +1,19 @@
-# Empty root-image mountpoints for the read-only Meizu auxiliary partitions.
-/custom    u:object_r:rootfs:s0
+# Empty root-image mountpoint for the read-only Meizu auxiliary partition.
 /mnv       u:object_r:rootfs:s0
 
+/vendor/bin/cbd                 u:object_r:m86_cbd_exec:s0
+/vendor/bin/gpsd                u:object_r:m86_gpsd_exec:s0
+/vendor/bin/mcDriverDaemon      u:object_r:m86_mobicore_exec:s0
+/vendor/bin/m86_usb_serial      u:object_r:m86_usb_serial_exec:s0
+
+# Generic GSI init requires an executable domain transition even in permissive
+# mode. These HIDL executable names are not covered by Android 13's defaults.
+/(vendor|system/vendor)/bin/hw/android\.hardware\.thermal@2\.0-service\.samsung  u:object_r:hal_thermal_default_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.drm@1\.4-service\.clearkey     u:object_r:hal_drm_default_exec:s0
+
 # m86 Bluetooth owns one 32-bit service and the controller UART. This is a
-# non-Treble device, so /vendor resolves to /system/vendor at runtime; cover
-# both spellings exactly as the platform Bluetooth service rule does.
+# legacy-ABI device with a separate vendor filesystem; cover both canonical
+# and compatibility spellings as the platform Bluetooth service rule does.
 /(vendor|system/vendor)/bin/hw/android\.hardware\.bluetooth@1\.0-service\.m86  u:object_r:hal_bluetooth_default_exec:s0
 /dev/ttySAC4                                                                   u:object_r:hci_attach_dev:s0
 
@@ -33,6 +42,7 @@
 # Keep secure-element /dev/p61 handling out of the reader/HCE experiment.
 /data/nfc(/.*)?                                                               u:object_r:nfc_data_file:s0
 /data/vendor/nfc(/.*)?                                                        u:object_r:m86_nfc_vendor_data_file:s0
+/data/vendor/gatekeeper(/.*)?                                                 u:object_r:m86_gatekeeper_vendor_data_file:s0
 
 # The m86 Gatekeeper wrapper retains the platform Gatekeeper HAL domain while
 # using a unique output path, so the generic and device services cannot both

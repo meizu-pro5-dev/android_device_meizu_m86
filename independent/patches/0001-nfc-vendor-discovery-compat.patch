@@ -1,0 +1,69 @@
+diff --git a/pn8x/halimpl/hal/phNxpNciHal_ext.cc b/pn8x/halimpl/hal/phNxpNciHal_ext.cc
+index af48591..d4b0963 100644
+--- a/pn8x/halimpl/hal/phNxpNciHal_ext.cc
++++ b/pn8x/halimpl/hal/phNxpNciHal_ext.cc
+@@ -24,6 +24,7 @@
+ #include <phTmlNfc.h>
+ #include "hal_nxpese.h"
+ #include "hal_nxpnfc.h"
++#include "M86DiscoveryCompat.h"
+ /* Timeout value to wait for response from PN548AD */
+ #define HAL_EXTNS_WRITE_RSP_TIMEOUT (1000)
+ 
+@@ -650,6 +651,13 @@ NFCSTATUS phNxpNciHal_write_ext(uint16_t* cmd_len, uint8_t* p_cmd_data,
+                                 uint16_t* rsp_len, uint8_t* p_rsp_data) {
+   NFCSTATUS status = NFCSTATUS_SUCCESS;
+ 
++  unsigned long m86_discovery_compat = 0;
++  if (GetNxpNumValue("M86_PN547_DISCOVERY_COMPAT", &m86_discovery_compat,
++                    sizeof(m86_discovery_compat)) && m86_discovery_compat == 1 &&
++      m86FilterDiscovery(cmd_len, p_cmd_data)) {
++    NXPLOG_NCIHAL_D("m86 PN547: removed unsupported discovery modes");
++  }
++
+   phNxpNciHal_NfcDep_cmd_ext(p_cmd_data, cmd_len);
+ 
+   if (phNxpDta_IsEnable() == true) {
+diff --git a/pn8x/halimpl/hal/M86DiscoveryCompat.h b/pn8x/halimpl/hal/M86DiscoveryCompat.h
+new file mode 100644
+--- /dev/null
++++ b/pn8x/halimpl/hal/M86DiscoveryCompat.h
+@@ -0,0 +1,38 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++#pragma once
++#include <stddef.h>
++#include <stdint.h>
++
++// PN547 on m86 rejects proprietary Kovio/B-prime discovery modes. Keep this
++// device workaround in the vendor transport rather than the system NFC stack.
++// The standard and NXP proprietary mode identifiers are both covered. The
++// board config disables B-prime with 0xff; never forward it as a real mode.
++inline bool m86UnsupportedDiscoveryMode(uint8_t mode) {
++  return mode == 0x70 || mode == 0x77 || mode == 0x74 || mode == 0xf4 || mode == 0xff;
++}
++
++inline bool m86FilterDiscovery(uint16_t* length, uint8_t* command) {
++  if (!length || !command || *length < 4 || command[0] != 0x21 || command[1] != 0x03)
++    return false;
++  const size_t count = command[3];
++  if (static_cast<size_t>(*length) != 4 + 2 * count ||
++      static_cast<size_t>(command[2]) != 1 + 2 * count)
++    return false;
++  size_t kept = 0;
++  for (size_t i = 0; i < count; ++i)
++    if (!m86UnsupportedDiscoveryMode(command[4 + 2 * i])) ++kept;
++  // Do not fabricate success or send an empty discovery request. In the
++  // unsupported-only case retain the controller's normal error response.
++  if (!kept || kept == count) return false;
++  size_t output = 4;
++  for (size_t i = 0; i < count; ++i) {
++    const size_t input = 4 + 2 * i;
++    if (m86UnsupportedDiscoveryMode(command[input])) continue;
++    command[output++] = command[input];
++    command[output++] = command[input + 1];
++  }
++  command[2] = static_cast<uint8_t>(1 + 2 * kept);
++  command[3] = static_cast<uint8_t>(kept);
++  *length = static_cast<uint16_t>(output);
++  return true;
++}

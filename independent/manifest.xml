@@ -1,0 +1,4 @@
+<!-- First input to assemble_vintf: HALs are merged from the normal device
+     manifest and module fragments. FCM 3 retains the implemented GNSS 1.0,
+     NFC 1.1 and radio 1.1 interfaces; this does not certify kernel compliance. -->
+<manifest version="1.0" type="device" target-level="3"/>

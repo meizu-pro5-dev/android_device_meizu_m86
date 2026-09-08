@@ -1,0 +1,42 @@
+# Independent-vendor variant of experiments/init.m86.fingerprint-experiment.rc
+# Installed whenever the maintained Trustonic FPC path is enabled.
+
+on init
+    export MC_AUTH_TOKEN_PATH /data/misc/mcRegistry
+
+on post-fs-data
+    mkdir /data/misc/mcRegistry 0770 system system
+    mkdir /data/fpc 0770 system system
+    # Trustonic TbStorage files are created under /data/misc/mcRegistry by the
+    # driver and default to root ownership. The TAs (matcher 0401, STH 070610)
+    # re-open them from the system-uid HAL, so keep the whole tree system-owned.
+    # init's chown has no recursive form; exec the tool instead.
+    exec u:r:vendor_init:s0 system system -- /system/bin/toybox chown -R system:system /data/misc/mcRegistry
+    chown system system /dev/mobicore
+    chmod 0600 /dev/mobicore
+    chown system system /dev/mobicore-user
+    chmod 0660 /dev/mobicore-user
+    chown system system /dev/fpc1020
+    chmod 0660 /dev/fpc1020
+    # The FPC TAC allocates its crypto buffer through the Exynos secure memory
+    # device before it opens a Trustonic session. It runs as system, so the
+    # root-owned 0600 node must be handed to it.
+    chown system system /dev/s5p-smem
+    chmod 0660 /dev/s5p-smem
+    start mobicore
+
+# Register every t-base driver trustlet, not only the FPC template and secure
+# SPI pair. The drbin requests SEC_DRIVER (0706) and STH (070610) during its
+# driver chain, and the fingerprint HAL opens 0401 on demand; without the
+# explicit registration the STH never loads and every TA session fails.
+service mobicore /vendor/bin/mcDriverDaemon \
+    -r /vendor/app/020a0000000000000000000000000000.drbin \
+    -r /vendor/app/mcRegistry/04010000000000000000000000000000.tlbin \
+    -r /vendor/app/mcRegistry/04020000000000000000000000000000.tlbin \
+    -r /vendor/app/mcRegistry/07020000000000000000000000000000.tlbin \
+    -r /vendor/app/mcRegistry/07060000000000000000000000000000.tlbin \
+    -r /vendor/app/mcRegistry/07061000000000000000000000000000.tlbin
+    class core
+    user system
+    group system
+    disabled

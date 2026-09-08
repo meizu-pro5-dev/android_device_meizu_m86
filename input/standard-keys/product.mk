@@ -7,5 +7,5 @@ M86_STANDARD_KEYS_PATH := device/meizu/m86/input/standard-keys
 # files contain no FPC/mBack gesture aliases and have no userspace daemon
 # dependency.
 PRODUCT_COPY_FILES += \
-    $(M86_STANDARD_KEYS_PATH)/keylayout/fts.kl:system/usr/keylayout/fts.kl \
-    $(M86_STANDARD_KEYS_PATH)/keylayout/gpio-keys.kl:system/usr/keylayout/gpio-keys.kl
+    $(M86_STANDARD_KEYS_PATH)/keylayout/fts.kl:$(M86_DEVICE_COPY_OUT)/usr/keylayout/fts.kl \
+    $(M86_STANDARD_KEYS_PATH)/keylayout/gpio-keys.kl:$(M86_DEVICE_COPY_OUT)/usr/keylayout/gpio-keys.kl

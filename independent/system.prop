@@ -1,0 +1,2 @@
+# Device defaults belong to vendor.prop in the independent product.
+# An explicit file prevents build/make/core/sysprop.mk's system.prop fallback.

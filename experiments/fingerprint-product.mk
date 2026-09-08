@@ -31,7 +31,12 @@ PRODUCT_PACKAGE_OVERLAYS += \
     $(LOCAL_FINGERPRINT_EXPERIMENT_PATH)/experiments/overlay
 
 PRODUCT_COPY_FILES += \
-    frameworks/native/data/etc/android.hardware.fingerprint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.fingerprint.xml \
-    $(LOCAL_FINGERPRINT_EXPERIMENT_PATH)/experiments/init.m86.fingerprint-experiment.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.m86.fingerprint-experiment.rc
+    frameworks/native/data/etc/android.hardware.fingerprint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.fingerprint.xml
 
+ifeq ($(M86_VENDOR_INDEPENDENT),true)
+PRODUCT_COPY_FILES += device/meizu/m86/independent/init.m86.fingerprint.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.m86.fingerprint-experiment.rc
+$(call inherit-product, vendor/meizu/m86/m86-fingerprint-independent-vendor.mk)
+else
+PRODUCT_COPY_FILES += $(LOCAL_FINGERPRINT_EXPERIMENT_PATH)/experiments/init.m86.fingerprint-experiment.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.m86.fingerprint-experiment.rc
 $(call inherit-product-if-exists, vendor/meizu/m86/m86-fingerprint-experiment-vendor.mk)
+endif

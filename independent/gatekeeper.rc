@@ -1,0 +1,10 @@
+on post-fs-data
+    mkdir /data/vendor/gatekeeper 0700 system system
+    restorecon_recursive /data/vendor/gatekeeper
+
+service vendor.gatekeeper-1-0 /vendor/bin/hw/android.hardware.gatekeeper@1.0-service.m86 /data/vendor/gatekeeper
+    override
+    class hal
+    user system
+    group system
+    setenv LD_LIBRARY_PATH /vendor/lib64/gatekeeper-legacy

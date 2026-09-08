@@ -28,8 +28,11 @@
 #include <hardware/hardware.h>
 #include <log/log.h>
 
-#define FLYME_FINGERPRINT_HAL \
-  "/system/lib64/hw/fingerprint.m86.flyme.so"
+#ifdef __ANDROID_VENDOR__
+#define FLYME_FINGERPRINT_HAL "/vendor/lib64/hw/fingerprint.m86.flyme.so"
+#else
+#define FLYME_FINGERPRINT_HAL "/system/lib64/hw/fingerprint.m86.flyme.so"
+#endif
 
 struct flyme_fingerprint_device {
   hw_device_t common;

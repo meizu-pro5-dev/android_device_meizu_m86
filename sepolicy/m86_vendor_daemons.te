@@ -1,0 +1,25 @@
+# Device-owned service transitions. A generic init must not depend on the
+# Lineage permissive-mode fallback for executables with no domain transition.
+type m86_cbd, domain;
+type m86_cbd_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(m86_cbd)
+
+type m86_gpsd, domain;
+type m86_gpsd_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(m86_gpsd)
+net_domain(m86_gpsd)
+hwbinder_use(m86_gpsd)
+allow m86_gpsd fwk_sensor_hwservice:hwservice_manager find;
+binder_call(m86_gpsd, system_server)
+binder_call(system_server, m86_gpsd)
+
+type m86_mobicore, domain;
+type m86_mobicore_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(m86_mobicore)
+
+type m86_usb_serial, domain;
+type m86_usb_serial_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(m86_usb_serial)
+
+# The current kernel is permissive. These transitions are necessary for
+# portable init behavior; they are not an enforcing-policy completion claim.

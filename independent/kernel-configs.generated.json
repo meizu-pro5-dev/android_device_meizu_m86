@@ -1,0 +1,22 @@
+{
+  "cm_pro5_vendor_defconfig": {
+    "base": "cm_pro5_defconfig",
+    "base_sha256": "3332387b6dc03b1b3b422cf7c9f06e68dba3f79395ab6be8e122daffb9f6839b",
+    "sha256": "6ee2b5141d2eb4e6e73cdd1e295630825bc9d008136cb38bf69f726a37774caf"
+  },
+  "cm_pro5_r22p0_vendor_defconfig": {
+    "base": "cm_pro5_r22p0_defconfig",
+    "base_sha256": "8c0b5ded918527bd6e7818f80efd876811bceeca78e5afb316d47b87b6d24a9e",
+    "sha256": "29e9808478de3fc9a8932602782a121f88d10f6c740a41b7e811f185e831a945"
+  },
+  "cm_pro5_raw_navigation_vendor_defconfig": {
+    "base": "cm_pro5_raw_navigation_defconfig",
+    "base_sha256": "9056310e133c22bdb5b2b9b21770c4a03cb943ee7cd967158fdfb7847f9ff172",
+    "sha256": "5cca5737ede8b635a615729cebc71f5131548dbf4676215f7c6c767367e7d3c7"
+  },
+  "cm_pro5_raw_navigation_r22p0_vendor_defconfig": {
+    "base": "cm_pro5_raw_navigation_r22p0_defconfig",
+    "base_sha256": "209cc4d0b7829406c5f09aa84c0b35fecf076f80b58247329938bd7d8d765a16",
+    "sha256": "1be417805973b88703069deb91b19e2f786507c6c3b9b80286c2d22a48bec6ea"
+  }
+}

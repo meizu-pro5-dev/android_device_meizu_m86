@@ -17,6 +17,7 @@ BOARD_VENDOR := meizu
 # matches every required m86 TFA/SITRIL dependency.
 AUDIOSERVER_MULTILIB := 32
 
+ifneq ($(M86_VENDOR_INDEPENDENT),true)
 # Route A carries explicit DT_NEEDED entries for its ABI shim and never loads
 # the Flyme libexynoscamera path. Preserve the path-scoped stock rule only for
 # rollback products that select the Flyme engine.
@@ -37,6 +38,7 @@ TARGET_LD_SHIM_LIBS += \
 # Flyme gpsd predates Q and still uses legacy linker greylist/APEX behavior.
 # Scope the compatibility level to this one audited executable.
 TARGET_PROCESS_SDK_VERSION_OVERRIDE := /system/bin/gpsd=27
+endif # legacy linker extensions
 # Android 10's AOSP libril remains the HIDL-facing compatibility layer. The
 # verified Flyme SITRIL implements the Android 7 RIL v12 callback ABI and
 # handles both m86 SIM sockets inside one process.
@@ -137,10 +139,15 @@ BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE := ext4
 # Android 10 uses system-as-root, so mount points needed by the second-stage
 # fstab must exist in the read-only root image. init cannot create a missing
 # directory here after SwitchRoot().
-BOARD_ROOT_EXTRA_FOLDERS += custom efs mnv
+BOARD_ROOT_EXTRA_FOLDERS += efs mnv
 
-# Legacy non-Treble layout: vendor files live below system/vendor.
-TARGET_COPY_OUT_VENDOR := system/vendor
+# Dedicated vendor filesystem on the stock 512 MiB custom partition. The
+# GPT name remains custom; Android and recovery both mount it at /vendor.
+# Physical separation preserves the legacy ABI for this first milestone; it
+# does not enable PRODUCT_FULL_TREBLE or claim a versioned VNDK contract.
+TARGET_COPY_OUT_VENDOR := vendor
+BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_VENDORIMAGE_PARTITION_SIZE := 536870912
 
 # Recovery
 TARGET_RECOVERY_FSTAB := $(M86_PATH)/storage/rootdir/etc/recovery.fstab
@@ -182,3 +189,11 @@ endif
 VENDOR_SECURITY_PATCH := 2019-08-01
 
 -include vendor/meizu/m86/BoardConfigVendor.mk
+
+ifeq ($(M86_VENDOR_INDEPENDENT),true)
+BOARD_VNDK_VERSION := current
+TARGET_KERNEL_CONFIG := $(patsubst %_defconfig,%_vendor_defconfig,$(TARGET_KERNEL_CONFIG))
+DEVICE_MANIFEST_FILE := $(M86_PATH)/independent/manifest.xml $(DEVICE_MANIFEST_FILE)
+DEVICE_MATRIX_FILE := $(M86_PATH)/independent/compatibility_matrix.xml
+BOARD_ROOT_EXTRA_FOLDERS := $(filter-out efs mnv,$(BOARD_ROOT_EXTRA_FOLDERS))
+endif

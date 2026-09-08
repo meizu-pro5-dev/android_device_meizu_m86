@@ -15,6 +15,10 @@ LOCAL_MODULE := fingerprint.m86
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MULTILIB := 64
 LOCAL_SRC_FILES := FingerprintCompat.c
+LOCAL_HEADER_LIBRARIES := libhardware_headers
+ifeq ($(M86_VENDOR_INDEPENDENT),true)
+LOCAL_VENDOR_MODULE := true
+endif
 LOCAL_SHARED_LIBRARIES := \
     libdl \
     liblog

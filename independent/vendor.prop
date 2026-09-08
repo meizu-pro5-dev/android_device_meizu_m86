@@ -49,3 +49,10 @@ exynos.modempath=/vendor/firmware/modem.bin
 ro.telephony.default_network=9
 ro.ril.ecclist=911,08,112,118,999,000
 radio.smsdomain=0
+
+# Android 12's product-compatible rild reads only the vendor-prefixed loader
+# properties. Keep the locked Flyme SITRIL path and modem IPC argument paired.
+vendor.rild.libpath=/vendor/lib64/libsitril.so
+vendor.rild.libargs=-d /dev/umts_ipc0
+
+# The dual-SIM policy remains in system.prop for the telephony framework.

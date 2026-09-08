@@ -7,11 +7,19 @@ M86_USB_PATH := device/meizu/m86/usb
 # state machine. The identity-ready property is a published input; this owner
 # never starts or stops Bluetooth or any other foreign HAL.
 PRODUCT_PACKAGES += \
-    android.hardware.usb@1.0-service.basic \
-    m86_usb_serial
+    android.hardware.usb@1.0-service.basic
 
-PRODUCT_COPY_FILES += \
-    $(M86_USB_PATH)/rootdir/etc/init.m86.usb.rc:root/init.m86.usb.rc
+ifeq ($(M86_VENDOR_INDEPENDENT),true)
+PRODUCT_PACKAGES += m86_usb_serial.vendor
+else
+PRODUCT_PACKAGES += m86_usb_serial
+endif
+
+ifeq ($(M86_VENDOR_INDEPENDENT),true)
+PRODUCT_COPY_FILES += device/meizu/m86/independent/init.m86.usb.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.m86.usb.rc
+else
+PRODUCT_COPY_FILES += $(M86_USB_PATH)/rootdir/etc/init.m86.usb.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.m86.usb.rc
+endif
 
 # Start with no data function. UsbDeviceManager appends adb only when USB
 # debugging is enabled. Synchronous FunctionFS is required by this 3.10 gadget.

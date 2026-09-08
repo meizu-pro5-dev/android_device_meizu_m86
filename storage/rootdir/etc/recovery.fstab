@@ -2,7 +2,7 @@
 /dev/block/platform/15570000.ufs/by-name/system      /system      ext4  ro        wait
 /dev/block/platform/15570000.ufs/by-name/cache       /cache       ext4  defaults  wait
 /dev/block/platform/15570000.ufs/by-name/userdata    /data        ext4  defaults  wait
-/dev/block/platform/15570000.ufs/by-name/custom      /custom      ext4  ro,noload  wait
+/dev/block/platform/15570000.ufs/by-name/custom      /vendor      ext4  ro        wait
 /dev/block/platform/15570000.ufs/by-name/efs         /efs         ext4  ro,noload  wait
 /dev/block/platform/15570000.ufs/by-name/bootimg     /boot        emmc  defaults  defaults
 /dev/block/platform/15570000.ufs/by-name/recovery    /recovery    emmc  defaults  defaults

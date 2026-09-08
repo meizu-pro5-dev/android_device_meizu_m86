@@ -1,0 +1,17 @@
+[
+  {
+    "repository": "hardware/nxp/nfc",
+    "base_head": "ea29b939898b9b7aa998124d3bbc9e7322c01514",
+    "patch": "patches/0001-nfc-vendor-discovery-compat.patch",
+    "files": {
+      "pn8x/halimpl/hal/phNxpNciHal_ext.cc": {
+        "before": "cc455dcff35631f8b82b1ebc5351e8f17ca4a6d096ecf635c116ffd737f64712",
+        "after": "a4c27a70eeb2de5563e34b6ef7960444e7f8057c31da34f60552bac42283db4e"
+      },
+      "pn8x/halimpl/hal/M86DiscoveryCompat.h": {
+        "before": null,
+        "after": "4589835a6254d2f788122b2957d2a269af9ff6a0ca25f8e135cf5143ff347c70"
+      }
+    }
+  }
+]
