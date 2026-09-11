@@ -145,11 +145,14 @@ PRODUCT_PACKAGES += \
     android.hardware.keymaster@4.0-service
 
 # Radio. AOSP's legacy rild/libril translates the Flyme callback ABI to HIDL
-# radio 1.1 for both slots. Android 12 loads the hash-locked SITRIL through
+# radio 1.4 bridge for both slots. The legacy RIL ABI loads the locked SITRIL through
 # vendor.rild.* properties; the stock pre-HIDL rild_exynos remains disabled.
 PRODUCT_PACKAGES += \
     android.hardware.radio@1.0 \
     android.hardware.radio@1.1 \
+    android.hardware.radio@1.2 \
+    android.hardware.radio@1.3 \
+    android.hardware.radio@1.4 \
     android.hardware.radio.deprecated@1.0 \
     libril \
     rild
@@ -182,10 +185,10 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/gps/gps.conf:$(M86_DEVICE_COPY_OUT)/etc/gps.conf \
     $(LOCAL_PATH)/gps/gps.xml:$(M86_DEVICE_COPY_OUT)/etc/gps.xml
 
-# Sensors. Android 10's generic HIDL bridge loads sensors.m86.so. The custom
-# service declaration adds the input group required by the Flyme ALS/PS path.
+# Sensors. The m86 bridge normalizes locked Flyme ALS/PS input timestamps.
+# The service declaration adds the input group required by that path.
 PRODUCT_PACKAGES += \
-    android.hardware.sensors@1.0-impl \
+    android.hardware.sensors@1.0-impl.m86 \
     android.hardware.sensors@1.0-service
 
 PRODUCT_COPY_FILES += \

@@ -1,0 +1,15 @@
+// Copyright (C) 2026 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+cc_library_shared {
+    name: "android.hardware.sensors@1.0-impl.m86",
+    stem: "android.hardware.sensors@1.0-impl",
+    defaults: ["hidl_defaults"],
+    proprietary: true,
+    compile_multilib: "64",
+    relative_install_path: "hw",
+    srcs: ["Sensors.cpp"],
+    shared_libs: ["liblog", "libcutils", "libhardware", "libbase", "libutils",
+                  "libhidlbase", "android.hardware.sensors@1.0"],
+    static_libs: ["android.hardware.sensors@1.0-convert", "multihal"],
+    include_dirs: ["hardware/interfaces/sensors/1.0/default/include/sensors"],
+}

@@ -236,15 +236,18 @@ sp<SensorEventQueue> SensorManager::createEventQueue(String8, int mode) {
 #ifdef M86_GPS_SENSOR_PROBE_MAIN
 #include <poll.h>
 #include <cstdio>
+#include <cstdlib>
+#include <time.h>
 #include <utils/Timers.h>
-int main() {
+int main(int argc, char** argv) {
+    const int requestedType = argc > 1 ? std::atoi(argv[1]) : ASENSOR_TYPE_ACCELEROMETER;
     using namespace android;
     auto& manager = SensorManager::getInstanceForPackage(String16("m86.sensor.probe"));
     const Sensor* const* sensors = nullptr;
     const auto count = manager.getSensorList(&sensors);
     if (count <= 0) { fprintf(stderr, "sensor list failed: %zd\n", count); return 1; }
-    const auto* sensor = manager.getDefaultSensor(ASENSOR_TYPE_ACCELEROMETER);
-    if (!sensor) { fprintf(stderr, "no accelerometer\n"); return 2; }
+    const auto* sensor = manager.getDefaultSensor(requestedType);
+    if (!sensor) { fprintf(stderr, "requested sensor unavailable\n"); return 2; }
     auto queue = manager.createEventQueue(String8("m86.sensor.probe"), 0);
     if (!queue) { fprintf(stderr, "queue creation failed\n"); return 3; }
     if (queue->enableSensor(sensor) != OK) return 4;
@@ -269,10 +272,16 @@ int main() {
         if (count < 0) break;
         received += count;
         for (ssize_t i = 0; i < count; ++i) {
-            printf("event handle=%d type=%d timestamp=%lld\n", events[i].sensor,
-                events[i].type, static_cast<long long>(events[i].timestamp));
+            timespec now{};
+            if (clock_gettime(CLOCK_BOOTTIME, &now) != 0) return 7;
+            const int64_t boot = now.tv_sec * 1000000000LL + now.tv_nsec;
+            printf("event handle=%d type=%d timestamp=%lld boot=%lld age_ms=%.3f value=%.3f\n",
+                events[i].sensor, events[i].type, static_cast<long long>(events[i].timestamp),
+                static_cast<long long>(boot), (boot - events[i].timestamp) / 1000000.0,
+                events[i].data[0]);
             if (events[i].sensor == sensor->getHandle() && events[i].timestamp > 0 &&
-                    events[i].type == ASENSOR_TYPE_ACCELEROMETER) valid = true;
+                    events[i].type == requestedType && events[i].timestamp <= boot + 1000000 &&
+                    events[i].timestamp >= boot - 1000000000LL) valid = true;
         }
     }
     const auto disabled = queue->disableSensor(sensor);

@@ -1,0 +1,1447 @@
+From bd5ca44ce7c854d351845858d13ef4bca3ef86f1 Mon Sep 17 00:00:00 2001
+From: 404698-FDU <228693120+404698-FDU@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 09:40:18 +0000
+Subject: [PATCH] radio: bridge legacy SITRIL to HIDL 1.4 with m86 signal
+ normalization
+
+Change-Id: I3042b76cc08e1b1e450bbf7da9412d171231f4a8
+---
+ libril/Android.mk             |  20 ++
+ libril/ril_service.cpp        | 283 +++++++++++++++++---
+ libril/ril_service_1_4.inc    | 478 ++++++++++++++++++++++++++++++++++
+ libril/tests/README.md        |  22 ++
+ libril/tests/radio14_mocks.h  | 228 ++++++++++++++++
+ libril/tests/radio14_test.cpp | 136 ++++++++++
+ 6 files changed, 1133 insertions(+), 34 deletions(-)
+ create mode 100644 libril/ril_service_1_4.inc
+ create mode 100644 libril/tests/README.md
+ create mode 100644 libril/tests/radio14_mocks.h
+ create mode 100644 libril/tests/radio14_test.cpp
+
+diff --git a/libril/Android.mk b/libril/Android.mk
+index c39c5a9..55f21ad 100644
+--- a/libril/Android.mk
++++ b/libril/Android.mk
+@@ -22,6 +22,9 @@ LOCAL_SHARED_LIBRARIES := \
+     librilutils \
+     android.hardware.radio@1.0 \
+     android.hardware.radio@1.1 \
++    android.hardware.radio@1.2 \
++    android.hardware.radio@1.3 \
++    android.hardware.radio@1.4 \
+     libhidlbase \
+ 
+ LOCAL_STATIC_LIBRARIES := \
+@@ -49,6 +52,23 @@ LOCAL_LICENSE_CONDITIONS:= notice
+ LOCAL_NOTICE_FILE:= $(LOCAL_PATH)/NOTICE
+ LOCAL_SANITIZE := integer
+ 
++ifeq ($(TARGET_DEVICE),m86)
++LOCAL_CFLAGS += -DM86_SITRIL_SIGNAL_STRENGTH
++endif
++
+ include $(BUILD_SHARED_LIBRARY)
+ 
+ endif # BOARD_PROVIDES_LIBRIL
++
++# Explicit test target, never installed in the product by default.
++include $(CLEAR_VARS)
++LOCAL_MODULE := m86-radio14-test
++LOCAL_VENDOR_MODULE := true
++LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/nativetest64/m86-radio14-test
++LOCAL_SRC_FILES := tests/radio14_test.cpp ril.cpp ril_event.cpp RilSapSocket.cpp sap_service.cpp
++LOCAL_C_INCLUDES := hardware/ril/include external/nanopb-c
++LOCAL_STATIC_LIBRARIES := libprotobuf-c-nano-enable_malloc-32bit
++LOCAL_SHARED_LIBRARIES := liblog libutils libcutils libhardware_legacy librilutils libhidlbase android.hardware.radio@1.0 android.hardware.radio@1.1 android.hardware.radio@1.2 android.hardware.radio@1.3 android.hardware.radio@1.4
++LOCAL_CFLAGS := -Wall -Wextra -Werror -Wno-unused-parameter -DANDROID_MULTI_SIM -DANDROID_SIM_COUNT_2 -DDSDA_RILD1
++LOCAL_CFLAGS += -DM86_SITRIL_SIGNAL_STRENGTH
++include $(BUILD_EXECUTABLE)
+diff --git a/libril/ril_service.cpp b/libril/ril_service.cpp
+index 1d64bb0..523d3de 100755
+--- a/libril/ril_service.cpp
++++ b/libril/ril_service.cpp
+@@ -17,6 +17,12 @@
+ #define LOG_TAG "RILC"
+ 
+ #include <android/hardware/radio/1.1/IRadio.h>
++#include <android/hardware/radio/1.4/IRadio.h>
++#include <android/hardware/radio/1.4/IRadioResponse.h>
++#include <android/hardware/radio/1.4/IRadioIndication.h>
++#include <sstream>
++#include <climits>
++#include <atomic>
+ #include <android/hardware/radio/1.1/IRadioResponse.h>
+ #include <android/hardware/radio/1.1/IRadioIndication.h>
+ #include <android/hardware/radio/1.1/types.h>
+@@ -41,6 +47,7 @@ using ::android::hardware::Return;
+ using ::android::hardware::hidl_string;
+ using ::android::hardware::hidl_vec;
+ using ::android::hardware::hidl_array;
++using ::android::hardware::hidl_bitfield;
+ using ::android::hardware::Void;
+ using android::CommandInfo;
+ using android::RequestInfo;
+@@ -63,6 +70,17 @@ using android::sp;
+ RIL_RadioFunctions *s_vendorFunctions = NULL;
+ static CommandInfo *s_commands;
+ 
++static bool validSignalStrengthSize(size_t size) {
++    if (size == sizeof(RIL_SignalStrength_v10)) return true;
++#ifdef M86_SITRIL_SIGNAL_STRENGTH
++    // Locked m86 SITRIL v12: 60 bytes, with LTE at byte 32 instead of 28.
++    return s_vendorFunctions && s_vendorFunctions->version == 12 && size == 60;
++#else
++    return false;
++#endif
++}
++
++
+ struct RadioImpl;
+ 
+ #if (SIM_COUNT >= 2)
+@@ -107,10 +125,17 @@ void convertRilDataCallListToHal(void *response, size_t responseLen,
+ 
+ void convertRilCellInfoListToHal(void *response, size_t responseLen, hidl_vec<CellInfo>& records);
+ 
+-struct RadioImpl : public V1_1::IRadio {
++struct RadioImpl : public V1_4::IRadio {
++    std::atomic<bool> mDataRoaming{false};
+     int32_t mSlotId;
+     sp<IRadioResponse> mRadioResponse;
+     sp<IRadioIndication> mRadioIndication;
++    sp<V1_2::IRadioResponse> mRadioResponseV1_2;
++    sp<V1_2::IRadioIndication> mRadioIndicationV1_2;
++    sp<V1_3::IRadioResponse> mRadioResponseV1_3;
++    sp<V1_3::IRadioIndication> mRadioIndicationV1_3;
++    sp<V1_4::IRadioResponse> mRadioResponseV1_4;
++    sp<V1_4::IRadioIndication> mRadioIndicationV1_4;
+     sp<V1_1::IRadioResponse> mRadioResponseV1_1;
+     sp<V1_1::IRadioIndication> mRadioIndicationV1_1;
+ 
+@@ -144,6 +169,7 @@ struct RadioImpl : public V1_1::IRadio {
+     Return<void> getCurrentCalls(int32_t serial);
+ 
+     Return<void> dial(int32_t serial, const Dial& dialInfo);
++    Return<void> dialLegacy(int32_t serial, const Dial& dialInfo, CommandInfo* command);
+ 
+     Return<void> getImsiForApp(int32_t serial,
+             const ::android::hardware::hidl_string& aid);
+@@ -448,6 +474,71 @@ struct RadioImpl : public V1_1::IRadio {
+     Return<void> setCarrierInfoForImsiEncryption(int32_t serial,
+             const V1_1::ImsiEncryptionInfo& message);
+ 
++    // Methods from ::android::hardware::radio::V1_2::IRadio follow.
++    Return<void> startNetworkScan_1_2(int32_t serial,
++            const ::android::hardware::radio::V1_2::NetworkScanRequest& request);
++    Return<void> setIndicationFilter_1_2(int32_t serial,
++            hidl_bitfield<::android::hardware::radio::V1_2::IndicationFilter> indicationFilter);
++    Return<void> setSignalStrengthReportingCriteria(int32_t serial, int32_t hysteresisMs,
++            int32_t hysteresisDb, const hidl_vec<int32_t>& thresholdsDbm,
++            ::android::hardware::radio::V1_2::AccessNetwork accessNetwork);
++    Return<void> setLinkCapacityReportingCriteria(int32_t serial, int32_t hysteresisMs,
++            int32_t hysteresisDlKbps, int32_t hysteresisUlKbps,
++            const hidl_vec<int32_t>& thresholdsDownlinkKbps,
++            const hidl_vec<int32_t>& thresholdsUplinkKbps,
++            ::android::hardware::radio::V1_2::AccessNetwork accessNetwork);
++    Return<void> setupDataCall_1_2(int32_t serial,
++            ::android::hardware::radio::V1_2::AccessNetwork accessNetwork,
++            const ::android::hardware::radio::V1_0::DataProfileInfo& dataProfileInfo,
++            bool modemCognitive, bool roamingAllowed, bool isRoaming,
++            ::android::hardware::radio::V1_2::DataRequestReason reason,
++            const hidl_vec<hidl_string>& addresses, const hidl_vec<hidl_string>& dnses);
++    Return<void> deactivateDataCall_1_2(int32_t serial, int32_t cid,
++            ::android::hardware::radio::V1_2::DataRequestReason reason);
++
++    // Methods from ::android::hardware::radio::V1_3::IRadio follow.
++    Return<void> setSystemSelectionChannels(int32_t serial, bool specifyChannels,
++            const hidl_vec<::android::hardware::radio::V1_1::RadioAccessSpecifier>& specifiers);
++    Return<void> enableModem(int32_t serial, bool on);
++    Return<void> getModemStackStatus(int32_t serial);
++
++    // Methods from ::android::hardware::radio::V1_4::IRadio follow.
++    Return<void> setupDataCall_1_4(int32_t serial,
++            ::android::hardware::radio::V1_4::AccessNetwork accessNetwork,
++            const ::android::hardware::radio::V1_4::DataProfileInfo& dataProfileInfo,
++            bool roamingAllowed, ::android::hardware::radio::V1_2::DataRequestReason reason,
++            const hidl_vec<hidl_string>& addresses, const hidl_vec<hidl_string>& dnses);
++    Return<void> setInitialAttachApn_1_4(int32_t serial,
++            const ::android::hardware::radio::V1_4::DataProfileInfo& dataProfileInfo);
++    Return<void> setDataProfile_1_4(int32_t serial,
++            const hidl_vec<::android::hardware::radio::V1_4::DataProfileInfo>& profiles);
++    Return<void> emergencyDial(int32_t serial,
++            const ::android::hardware::radio::V1_0::Dial& dialInfo,
++            hidl_bitfield<android::hardware::radio::V1_4::EmergencyServiceCategory> categories,
++            const hidl_vec<hidl_string>& urns,
++            ::android::hardware::radio::V1_4::EmergencyCallRouting routing,
++            bool fromEmergencyDialer, bool isTesting);
++    Return<void> startNetworkScan_1_4(int32_t serial,
++            const ::android::hardware::radio::V1_2::NetworkScanRequest& request);
++    Return<void> getPreferredNetworkTypeBitmap(int32_t serial);
++    Return<void> setPreferredNetworkTypeBitmap(
++            int32_t serial, hidl_bitfield<RadioAccessFamily> networkTypeBitmap);
++    Return<void> setAllowedCarriers_1_4(int32_t serial,
++            const ::android::hardware::radio::V1_4::CarrierRestrictionsWithPriority& carriers,
++            ::android::hardware::radio::V1_4::SimLockMultiSimPolicy multiSimPolicy);
++    Return<void> getAllowedCarriers_1_4(int32_t serial);
++    Return<void> getSignalStrength_1_4(int32_t serial);
++
++    template<class F> Return<void> reply(int32_t serial, RadioError error, F callback) {
++        auto* lock = radio::getRadioServiceRwlock(mSlotId);
++        int rc = pthread_rwlock_rdlock(lock);
++        assert(rc == 0);
++        RadioResponseInfo info = {RadioResponseType::SOLICITED, serial, error};
++        callback(info);
++        rc = pthread_rwlock_unlock(lock);
++        assert(rc == 0);
++        return Void();
++    }
+     void checkReturnStatus(Return<void>& ret);
+ };
+ 
+@@ -468,8 +559,8 @@ void memsetAndFreeStrings(int numPointers, ...) {
+ }
+ 
+ void sendErrorResponse(RequestInfo *pRI, RIL_Errno err) {
+-    pRI->pCI->responseFunction((int) pRI->socket_id,
+-            (int) RadioResponseType::SOLICITED, pRI->token, err, NULL, 0);
++    // Use the normal completion path: remove the request and hold the callback lock.
++    RIL_onRequestComplete(pRI, err, nullptr, 0);
+ }
+ 
+ /**
+@@ -745,6 +836,12 @@ void checkReturnStatus(int32_t slotId, Return<void>& ret, bool isRadioService) {
+         if (counter == mCounterRadio[slotId]) {
+             radioService[slotId]->mRadioResponse = NULL;
+             radioService[slotId]->mRadioIndication = NULL;
++            radioService[slotId]->mRadioResponseV1_2 = nullptr;
++            radioService[slotId]->mRadioIndicationV1_2 = nullptr;
++            radioService[slotId]->mRadioResponseV1_3 = nullptr;
++            radioService[slotId]->mRadioIndicationV1_3 = nullptr;
++            radioService[slotId]->mRadioResponseV1_4 = nullptr;
++            radioService[slotId]->mRadioIndicationV1_4 = nullptr;
+             radioService[slotId]->mRadioResponseV1_1 = NULL;
+             radioService[slotId]->mRadioIndicationV1_1 = NULL;
+             mCounterRadio[slotId]++;
+@@ -785,6 +882,24 @@ Return<void> RadioImpl::setResponseFunctions(
+         mRadioIndicationV1_1 = nullptr;
+     }
+ 
++    mRadioResponseV1_2 = V1_2::IRadioResponse::castFrom(mRadioResponse).withDefault(nullptr);
++    mRadioIndicationV1_2 = V1_2::IRadioIndication::castFrom(mRadioIndication).withDefault(nullptr);
++    if (!mRadioResponseV1_2 || !mRadioIndicationV1_2) {
++        mRadioResponseV1_2 = nullptr;
++        mRadioIndicationV1_2 = nullptr;
++    }
++    mRadioResponseV1_3 = V1_3::IRadioResponse::castFrom(mRadioResponse).withDefault(nullptr);
++    mRadioIndicationV1_3 = V1_3::IRadioIndication::castFrom(mRadioIndication).withDefault(nullptr);
++    if (!mRadioResponseV1_3 || !mRadioIndicationV1_3) {
++        mRadioResponseV1_3 = nullptr;
++        mRadioIndicationV1_3 = nullptr;
++    }
++    mRadioResponseV1_4 = V1_4::IRadioResponse::castFrom(mRadioResponse).withDefault(nullptr);
++    mRadioIndicationV1_4 = V1_4::IRadioIndication::castFrom(mRadioIndication).withDefault(nullptr);
++    if (!mRadioResponseV1_4 || !mRadioIndicationV1_4) {
++        mRadioResponseV1_4 = nullptr;
++        mRadioIndicationV1_4 = nullptr;
++    }
+     mCounterRadio[mSlotId]++;
+ 
+     ret = pthread_rwlock_unlock(radioServiceRwlockPtr);
+@@ -883,6 +998,10 @@ Return<void> RadioImpl::getCurrentCalls(int32_t serial) {
+ }
+ 
+ Return<void> RadioImpl::dial(int32_t serial, const Dial& dialInfo) {
++    return dialLegacy(serial, dialInfo, nullptr);
++}
++
++Return<void> RadioImpl::dialLegacy(int32_t serial, const Dial& dialInfo, CommandInfo* command) {
+ #if VDBG
+     RLOGD("dial: serial %d", serial);
+ #endif
+@@ -890,6 +1009,7 @@ Return<void> RadioImpl::dial(int32_t serial, const Dial& dialInfo) {
+     if (pRI == NULL) {
+         return Void();
+     }
++    if (command) pRI->pCI = command;
+     RIL_Dial dial = {};
+     RIL_UUS_Info uusInfo = {};
+     int32_t sizeOfDial = sizeof(dial);
+@@ -2955,6 +3075,8 @@ int responseInt(RadioResponseInfo& responseInfo, int serial, int responseType, R
+     return ret;
+ }
+ 
++#include "ril_service_1_4.inc"
++
+ int radio::getIccCardStatusResponse(int slotId,
+                                    int responseType, int serial, RIL_Errno e,
+                                    void *response, size_t responseLen) {
+@@ -2964,6 +3086,10 @@ int radio::getIccCardStatusResponse(int slotId,
+         CardStatus cardStatus = {CardState::ABSENT, PinState::UNKNOWN, -1, -1, -1, {}};
+         RIL_CardStatus_v6 *p_cur = ((RIL_CardStatus_v6 *) response);
+         if (response == NULL || responseLen != sizeof(RIL_CardStatus_v6)
++                || p_cur->num_applications < 0 || p_cur->num_applications > RIL_CARD_MAX_APPS
++                || p_cur->gsm_umts_subscription_app_index < -1
++                || p_cur->cdma_subscription_app_index < -1
++                || p_cur->ims_subscription_app_index < -1
+                 || p_cur->gsm_umts_subscription_app_index >= p_cur->num_applications
+                 || p_cur->cdma_subscription_app_index >= p_cur->num_applications
+                 || p_cur->ims_subscription_app_index >= p_cur->num_applications) {
+@@ -2995,8 +3121,14 @@ int radio::getIccCardStatusResponse(int slotId,
+             }
+         }
+ 
+-        Return<void> retStatus = radioService[slotId]->mRadioResponse->
+-                getIccCardStatusResponse(responseInfo, cardStatus);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_4) {
++            retStatus = radioService[slotId]->mRadioResponseV1_4->getIccCardStatusResponse_1_4(responseInfo, legacy14::card14(cardStatus, slotId));
++        } else if (radioService[slotId]->mRadioResponseV1_2) {
++            retStatus = radioService[slotId]->mRadioResponseV1_2->getIccCardStatusResponse_1_2(responseInfo, legacy14::card12(cardStatus, slotId));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->getIccCardStatusResponse(responseInfo, cardStatus);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("getIccCardStatusResponse: radioService[%d]->mRadioResponse == NULL", slotId);
+@@ -3201,8 +3333,12 @@ int radio::getCurrentCallsResponse(int slotId,
+             }
+         }
+ 
+-        Return<void> retStatus = radioService[slotId]->mRadioResponse->
+-                getCurrentCallsResponse(responseInfo, calls);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_2) {
++            retStatus = radioService[slotId]->mRadioResponseV1_2->getCurrentCallsResponse_1_2(responseInfo, legacy14::calls12(calls));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->getCurrentCallsResponse(responseInfo, calls);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("getCurrentCallsResponse: radioService[%d]->mRadioResponse == NULL", slotId);
+@@ -3428,15 +3564,21 @@ int radio::getSignalStrengthResponse(int slotId,
+         RadioResponseInfo responseInfo = {};
+         populateResponseInfo(responseInfo, serial, responseType, e);
+         SignalStrength signalStrength = {};
+-        if (response == NULL || responseLen != sizeof(RIL_SignalStrength_v10)) {
+-            RLOGE("getSignalStrengthResponse: Invalid response");
++        if (response == NULL || !validSignalStrengthSize(responseLen)) {
++            RLOGE("getSignalStrengthResponse: invalid length %zu, expected %zu, RIL version %d, error %d", responseLen, sizeof(RIL_SignalStrength_v10), s_vendorFunctions->version, e);
+             if (e == RIL_E_SUCCESS) responseInfo.error = RadioError::INVALID_RESPONSE;
+         } else {
+             convertRilSignalStrengthToHal(response, responseLen, signalStrength);
+         }
+ 
+-        Return<void> retStatus = radioService[slotId]->mRadioResponse->getSignalStrengthResponse(
+-                responseInfo, signalStrength);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_4) {
++            retStatus = radioService[slotId]->mRadioResponseV1_4->getSignalStrengthResponse_1_4(responseInfo, legacy14::signal14(signalStrength));
++        } else if (radioService[slotId]->mRadioResponseV1_2) {
++            retStatus = radioService[slotId]->mRadioResponseV1_2->getSignalStrengthResponse_1_2(responseInfo, legacy14::signal12(signalStrength));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->getSignalStrengthResponse(responseInfo, signalStrength);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("getSignalStrengthResponse: radioService[%d]->mRadioResponse == NULL",
+@@ -3839,9 +3981,12 @@ int radio::getVoiceRegistrationStateResponse(int slotId,
+             }
+         }
+ 
+-        Return<void> retStatus =
+-                radioService[slotId]->mRadioResponse->getVoiceRegistrationStateResponse(
+-                responseInfo, voiceRegResponse);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_2) {
++            retStatus = radioService[slotId]->mRadioResponseV1_2->getVoiceRegistrationStateResponse_1_2(responseInfo, legacy14::voice12(voiceRegResponse));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->getVoiceRegistrationStateResponse(responseInfo, voiceRegResponse);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("getVoiceRegistrationStateResponse: radioService[%d]->mRadioResponse == NULL",
+@@ -3895,9 +4040,16 @@ int radio::getDataRegistrationStateResponse(int slotId,
+             }
+         }
+ 
+-        Return<void> retStatus =
+-                radioService[slotId]->mRadioResponse->getDataRegistrationStateResponse(responseInfo,
+-                dataRegResponse);
++        if (responseInfo.error == RadioError::NONE)
++            radioService[slotId]->mDataRoaming = dataRegResponse.regState == RegState::REG_ROAMING;
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_4) {
++            retStatus = radioService[slotId]->mRadioResponseV1_4->getDataRegistrationStateResponse_1_4(responseInfo, legacy14::data14(dataRegResponse));
++        } else if (radioService[slotId]->mRadioResponseV1_2) {
++            retStatus = radioService[slotId]->mRadioResponseV1_2->getDataRegistrationStateResponse_1_2(responseInfo, legacy14::data12(dataRegResponse));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->getDataRegistrationStateResponse(responseInfo, dataRegResponse);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("getDataRegistrationStateResponse: radioService[%d]->mRadioResponse == NULL",
+@@ -4056,8 +4208,8 @@ int radio::setupDataCallResponse(int slotId,
+         populateResponseInfo(responseInfo, serial, responseType, e);
+ 
+         SetupDataCallResult result = {};
+-        if (response == NULL || (responseLen % sizeof(RIL_Data_Call_Response_v11)) != 0) {
+-            if (response != NULL) {
++        if (response == NULL || responseLen != sizeof(RIL_Data_Call_Response_v11)) {
++            if (e == RIL_E_SUCCESS) {
+                 RLOGE("setupDataCallResponse: Invalid response");
+                 if (e == RIL_E_SUCCESS) responseInfo.error = RadioError::INVALID_RESPONSE;
+             }
+@@ -4072,8 +4224,12 @@ int radio::setupDataCallResponse(int slotId,
+             convertRilDataCallToHal((RIL_Data_Call_Response_v11 *) response, result);
+         }
+ 
+-        Return<void> retStatus = radioService[slotId]->mRadioResponse->setupDataCallResponse(
+-                responseInfo, result);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_4) {
++            retStatus = radioService[slotId]->mRadioResponseV1_4->setupDataCallResponse_1_4(responseInfo, legacy14::data(result));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->setupDataCallResponse(responseInfo, result);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("setupDataCallResponse: radioService[%d]->mRadioResponse == NULL", slotId);
+@@ -4756,8 +4912,12 @@ int radio::getDataCallListResponse(int slotId,
+             convertRilDataCallListToHal(response, responseLen, ret);
+         }
+ 
+-        Return<void> retStatus = radioService[slotId]->mRadioResponse->getDataCallListResponse(
+-                responseInfo, ret);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_4) {
++            retStatus = radioService[slotId]->mRadioResponseV1_4->getDataCallListResponse_1_4(responseInfo, legacy14::data(ret));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->getDataCallListResponse(responseInfo, ret);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("getDataCallListResponse: radioService[%d]->mRadioResponse == NULL", slotId);
+@@ -5845,8 +6005,14 @@ int radio::getCellInfoListResponse(int slotId,
+             convertRilCellInfoListToHal(response, responseLen, ret);
+         }
+ 
+-        Return<void> retStatus = radioService[slotId]->mRadioResponse->getCellInfoListResponse(
+-                responseInfo, ret);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioResponseV1_4) {
++            retStatus = radioService[slotId]->mRadioResponseV1_4->getCellInfoListResponse_1_4(responseInfo, legacy14::cells14(ret));
++        } else if (radioService[slotId]->mRadioResponseV1_2) {
++            retStatus = radioService[slotId]->mRadioResponseV1_2->getCellInfoListResponse_1_2(responseInfo, legacy14::cells12(ret));
++        } else {
++            retStatus = radioService[slotId]->mRadioResponse->getCellInfoListResponse(responseInfo, ret);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("getCellInfoListResponse: radioService[%d]->mRadioResponse == NULL", slotId);
+@@ -6744,6 +6910,7 @@ int radio::radioStateChangedInd(int slotId,
+     if (radioService[slotId] != NULL && radioService[slotId]->mRadioIndication != NULL) {
+         RadioState radioState =
+                 (RadioState) CALL_ONSTATEREQUEST(slotId);
++        if (radioState != RadioState::ON) radioService[slotId]->mDataRoaming = false;
+         RLOGD("radioStateChangedInd: radioState %d", radioState);
+         Return<void> retStatus = radioService[slotId]->mRadioIndication->radioStateChanged(
+                 convertIntToRadioIndicationType(indicationType), radioState);
+@@ -6959,7 +7126,38 @@ int radio::nitzTimeReceivedInd(int slotId,
+ 
+ void convertRilSignalStrengthToHal(void *response, size_t responseLen,
+         SignalStrength& signalStrength) {
+-    RIL_SignalStrength_v10 *rilSignalStrength = (RIL_SignalStrength_v10 *) response;
++    // Never mutate a vendor-owned response buffer, including unsolicited samples.
++    RIL_SignalStrength_v10 sample = {};
++#ifdef M86_SITRIL_SIGNAL_STRENGTH
++    if (responseLen == 60 && s_vendorFunctions && s_vendorFunctions->version == 12) {
++        // Proven offsets in ProtocolMisc[Ind]SigStrengthAdapter::GetSignalStrength:
++        // GSM 0/4, LTE 32..52, TD-SCDMA 56. Bytes 16 and 28 are not written.
++        // Its constructor does not populate CDMA/EVDO measurements on this modem.
++        int32_t words[15];
++        memcpy(words, response, sizeof(words));
++        sample.GW_SignalStrength = {words[0], words[1]};
++        sample.CDMA_SignalStrength = {INT_MAX, INT_MAX};
++        sample.EVDO_SignalStrength = {INT_MAX, INT_MAX, INT_MAX};
++        memcpy(&sample.LTE_SignalStrength, words + 8, sizeof(sample.LTE_SignalStrength));
++        sample.TD_SCDMA_SignalStrength.rscp = words[14];
++        auto& gw = sample.GW_SignalStrength;
++        if (gw.signalStrength < 0 || gw.signalStrength > 31) gw.signalStrength = 99;
++        if (gw.bitErrorRate < 0 || gw.bitErrorRate > 7) gw.bitErrorRate = 99;
++        auto& lte = sample.LTE_SignalStrength;
++        if (lte.signalStrength < 0 || lte.signalStrength > 31) lte.signalStrength = 99;
++        if (lte.rsrp < 0 && lte.rsrp != INT_MIN) lte.rsrp = -lte.rsrp;
++        if (lte.rsrp < 44 || lte.rsrp > 140) lte.rsrp = INT_MAX;
++        if (lte.rsrq < 3 || lte.rsrq > 20) lte.rsrq = INT_MAX;
++        if (lte.rssnr < -200 || lte.rssnr > 300) lte.rssnr = INT_MAX;
++        if (lte.cqi < 0 || lte.cqi > 15) lte.cqi = INT_MAX;
++        if (lte.timingAdvance < 0) lte.timingAdvance = INT_MAX;
++        if (words[14] < 25 || words[14] > 120) sample.TD_SCDMA_SignalStrength.rscp = INT_MAX;
++    } else
++#endif
++    {
++        memcpy(&sample, response, sizeof(sample));
++    }
++    RIL_SignalStrength_v10 *rilSignalStrength = &sample;
+ 
+     // Fixup LTE for backwards compatibility
+     // signalStrength: -1 -> 99
+@@ -6968,7 +7166,8 @@ void convertRilSignalStrengthToHal(void *response, size_t responseLen,
+     }
+     // rsrp: -1 -> INT_MAX all other negative value to positive.
+     // So remap here
+-    if (rilSignalStrength->LTE_SignalStrength.rsrp == -1) {
++    if (rilSignalStrength->LTE_SignalStrength.rsrp == -1 ||
++            rilSignalStrength->LTE_SignalStrength.rsrp == INT_MIN) {
+         rilSignalStrength->LTE_SignalStrength.rsrp = INT_MAX;
+     } else if (rilSignalStrength->LTE_SignalStrength.rsrp < -1) {
+         rilSignalStrength->LTE_SignalStrength.rsrp = -rilSignalStrength->LTE_SignalStrength.rsrp;
+@@ -7008,7 +7207,7 @@ int radio::currentSignalStrengthInd(int slotId,
+                                     int indicationType, int token, RIL_Errno e,
+                                     void *response, size_t responseLen) {
+     if (radioService[slotId] != NULL && radioService[slotId]->mRadioIndication != NULL) {
+-        if (response == NULL || responseLen != sizeof(RIL_SignalStrength_v10)) {
++        if (response == NULL || !validSignalStrengthSize(responseLen)) {
+             RLOGE("currentSignalStrengthInd: invalid response");
+             return 0;
+         }
+@@ -7019,8 +7218,14 @@ int radio::currentSignalStrengthInd(int slotId,
+ #if VDBG
+         RLOGD("currentSignalStrengthInd");
+ #endif
+-        Return<void> retStatus = radioService[slotId]->mRadioIndication->currentSignalStrength(
+-                convertIntToRadioIndicationType(indicationType), signalStrength);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioIndicationV1_4) {
++            retStatus = radioService[slotId]->mRadioIndicationV1_4->currentSignalStrength_1_4(convertIntToRadioIndicationType(indicationType), legacy14::signal14(signalStrength));
++        } else if (radioService[slotId]->mRadioIndicationV1_2) {
++            retStatus = radioService[slotId]->mRadioIndicationV1_2->currentSignalStrength_1_2(convertIntToRadioIndicationType(indicationType), legacy14::signal12(signalStrength));
++        } else {
++            retStatus = radioService[slotId]->mRadioIndication->currentSignalStrength(convertIntToRadioIndicationType(indicationType), signalStrength);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("currentSignalStrengthInd: radioService[%d]->mRadioIndication == NULL",
+@@ -7070,8 +7275,12 @@ int radio::dataCallListChangedInd(int slotId,
+ #if VDBG
+         RLOGD("dataCallListChangedInd");
+ #endif
+-        Return<void> retStatus = radioService[slotId]->mRadioIndication->dataCallListChanged(
+-                convertIntToRadioIndicationType(indicationType), dcList);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioIndicationV1_4) {
++            retStatus = radioService[slotId]->mRadioIndicationV1_4->dataCallListChanged_1_4(convertIntToRadioIndicationType(indicationType), legacy14::data(dcList));
++        } else {
++            retStatus = radioService[slotId]->mRadioIndication->dataCallListChanged(convertIntToRadioIndicationType(indicationType), dcList);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("dataCallListChangedInd: radioService[%d]->mRadioIndication == NULL", slotId);
+@@ -7957,8 +8166,14 @@ int radio::cellInfoListInd(int slotId,
+ #if VDBG
+         RLOGD("cellInfoListInd");
+ #endif
+-        Return<void> retStatus = radioService[slotId]->mRadioIndication->cellInfoList(
+-                convertIntToRadioIndicationType(indicationType), records);
++        Return<void> retStatus;
++        if (radioService[slotId]->mRadioIndicationV1_4) {
++            retStatus = radioService[slotId]->mRadioIndicationV1_4->cellInfoList_1_4(convertIntToRadioIndicationType(indicationType), legacy14::cells14(records));
++        } else if (radioService[slotId]->mRadioIndicationV1_2) {
++            retStatus = radioService[slotId]->mRadioIndicationV1_2->cellInfoList_1_2(convertIntToRadioIndicationType(indicationType), legacy14::cells12(records));
++        } else {
++            retStatus = radioService[slotId]->mRadioIndication->cellInfoList(convertIntToRadioIndicationType(indicationType), records);
++        }
+         radioService[slotId]->checkReturnStatus(retStatus);
+     } else {
+         RLOGE("cellInfoListInd: radioService[%d]->mRadioIndication == NULL", slotId);
+diff --git a/libril/ril_service_1_4.inc b/libril/ril_service_1_4.inc
+new file mode 100644
+index 0000000..0b04939
+--- /dev/null
++++ b/libril/ril_service_1_4.inc
+@@ -0,0 +1,478 @@
++/* Copyright 2026 The LineageOS Project
++ * SPDX-License-Identifier: Apache-2.0
++ * Legacy RIL ABI bridge. Included after the dispatch and response helpers.
++ * Never pass HIDL 1.4 structures or new request numbers to the old modem library.
++ */
++namespace legacy14 {
++static const char* protocol(V1_4::PdpProtocolType p) {
++    switch (p) {
++        case V1_4::PdpProtocolType::IP: return "IP";
++        case V1_4::PdpProtocolType::IPV6: return "IPV6";
++        case V1_4::PdpProtocolType::IPV4V6: return "IPV4V6";
++        case V1_4::PdpProtocolType::PPP: return "PPP";
++        default: return "";
++    }
++}
++static DataProfileInfo profile(const V1_4::DataProfileInfo& p) {
++    DataProfileInfo q = {};
++    q.profileId = p.profileId; q.apn = p.apn;
++    q.protocol = protocol(p.protocol); q.roamingProtocol = protocol(p.roamingProtocol);
++    q.authType = p.authType; q.user = p.user; q.password = p.password;
++    q.type = p.type; q.maxConnsTime = p.maxConnsTime; q.maxConns = p.maxConns;
++    q.waitTime = p.waitTime; q.enabled = p.enabled;
++    q.supportedApnTypesBitmap = p.supportedApnTypesBitmap;
++    q.bearerBitmap = p.bearerBitmap; q.mtu = p.mtu; q.mvnoType = MvnoType::NONE;
++    return q;
++}
++static RadioTechnology rat(int access) {
++    switch (access) {
++        case 1: return RadioTechnology::GPRS;
++        case 2: return RadioTechnology::UMTS;
++        case 3: return RadioTechnology::LTE;
++        case 4: return RadioTechnology::IS95A;
++        default: return RadioTechnology::UNKNOWN;
++    }
++}
++static hidl_vec<hidl_string> words(const hidl_string& s) {
++    std::istringstream in(s.c_str()); std::vector<hidl_string> parts;
++    for (std::string word; in >> word;) parts.emplace_back(word);
++    return parts;
++}
++static V1_4::SetupDataCallResult data(const SetupDataCallResult& p) {
++    V1_4::SetupDataCallResult q = {};
++    q.cause = static_cast<V1_4::DataCallFailCause>(p.status);
++    q.suggestedRetryTime = p.suggestedRetryTime; q.cid = p.cid;
++    q.active = static_cast<V1_4::DataConnActiveStatus>(p.active);
++    q.type = V1_4::PdpProtocolType::UNKNOWN;
++    for (auto type : {V1_4::PdpProtocolType::IP, V1_4::PdpProtocolType::IPV6,
++                     V1_4::PdpProtocolType::IPV4V6, V1_4::PdpProtocolType::PPP}) {
++        if (p.type == protocol(type)) q.type = type;
++    }
++    q.ifname = p.ifname; q.addresses = words(p.addresses); q.dnses = words(p.dnses);
++    q.gateways = words(p.gateways); q.pcscf = words(p.pcscf); q.mtu = p.mtu;
++    return q;
++}
++static hidl_vec<V1_4::SetupDataCallResult> data(const hidl_vec<SetupDataCallResult>& p) {
++    hidl_vec<V1_4::SetupDataCallResult> q; q.resize(p.size());
++    for (size_t i = 0; i < p.size(); ++i) q[i] = data(p[i]);
++    return q;
++}
++static V1_2::SignalStrength signal12(const SignalStrength& p) {
++    V1_2::SignalStrength q = {};
++    q.gsm = p.gw; q.cdma = p.cdma; q.evdo = p.evdo; q.lte = p.lte;
++    q.tdScdma = p.tdScdma;
++    q.wcdma = {{INT_MAX, INT_MAX}, INT_MAX, INT_MAX};
++    return q;
++}
++static V1_4::SignalStrength signal14(const SignalStrength& p) {
++    auto s = signal12(p); V1_4::SignalStrength q = {};
++    q.gsm = s.gsm; q.cdma = s.cdma; q.evdo = s.evdo; q.lte = s.lte;
++    q.wcdma = s.wcdma;
++    // The legacy TD-SCDMA RSCP is positive dBm; 1.4 uses TS 27.007 encoding.
++    q.tdscdma = {INT_MAX, INT_MAX, INT_MAX};
++    if (p.tdScdma.rscp >= 25 && p.tdScdma.rscp <= 120)
++        q.tdscdma.rscp = 120 - p.tdScdma.rscp;
++    q.nr = {INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX};
++    return q;
++}
++static V1_2::CardStatus card12(const CardStatus& p, int slot) {
++    V1_2::CardStatus q = {}; q.base = p; q.physicalSlotId = slot; return q;
++}
++static V1_4::CardStatus card14(const CardStatus& p, int slot) {
++    V1_4::CardStatus q = {}; q.base = card12(p, slot); return q;
++}
++static hidl_vec<V1_2::Call> calls12(const hidl_vec<Call>& p) {
++    hidl_vec<V1_2::Call> q; q.resize(p.size());
++    for (size_t i = 0; i < p.size(); ++i) {
++        q[i].base = p[i]; q[i].audioQuality = V1_2::AudioQuality::UNSPECIFIED;
++    }
++    return q;
++}
++static V1_2::CellIdentity identity12(const CellIdentity& p) {
++    V1_2::CellIdentity q = {}; q.cellInfoType = p.cellInfoType;
++    q.cellIdentityGsm.resize(p.cellIdentityGsm.size());
++    for (size_t i = 0; i < p.cellIdentityGsm.size(); ++i) {
++        q.cellIdentityGsm[i].base = p.cellIdentityGsm[i];
++    }
++    q.cellIdentityWcdma.resize(p.cellIdentityWcdma.size());
++    for (size_t i = 0; i < p.cellIdentityWcdma.size(); ++i) {
++        q.cellIdentityWcdma[i].base = p.cellIdentityWcdma[i];
++    }
++    q.cellIdentityCdma.resize(p.cellIdentityCdma.size());
++    for (size_t i = 0; i < p.cellIdentityCdma.size(); ++i) {
++        q.cellIdentityCdma[i].base = p.cellIdentityCdma[i];
++    }
++    q.cellIdentityLte.resize(p.cellIdentityLte.size());
++    for (size_t i = 0; i < p.cellIdentityLte.size(); ++i) {
++        q.cellIdentityLte[i].base = p.cellIdentityLte[i];
++        q.cellIdentityLte[i].bandwidth = INT_MAX;
++    }
++    q.cellIdentityTdscdma.resize(p.cellIdentityTdscdma.size());
++    for (size_t i = 0; i < p.cellIdentityTdscdma.size(); ++i) {
++        q.cellIdentityTdscdma[i].base = p.cellIdentityTdscdma[i];
++        q.cellIdentityTdscdma[i].uarfcn = INT_MAX;
++    }
++    return q;
++}
++static V1_2::VoiceRegStateResult voice12(const VoiceRegStateResult& p) {
++    V1_2::VoiceRegStateResult q = {};
++    q.regState = p.regState;
++    q.rat = p.rat;
++    q.cssSupported = p.cssSupported;
++    q.roamingIndicator = p.roamingIndicator;
++    q.systemIsInPrl = p.systemIsInPrl;
++    q.defaultRoamingIndicator = p.defaultRoamingIndicator;
++    q.reasonForDenial = p.reasonForDenial;
++    q.cellIdentity = identity12(p.cellIdentity); return q;
++}
++static V1_2::DataRegStateResult data12(const DataRegStateResult& p) {
++    V1_2::DataRegStateResult q = {};
++    q.regState = p.regState;
++    q.rat = p.rat;
++    q.reasonDataDenied = p.reasonDataDenied;
++    q.maxDataCalls = p.maxDataCalls;
++    q.cellIdentity = identity12(p.cellIdentity); return q;
++}
++static V1_4::DataRegStateResult data14(const DataRegStateResult& p) {
++    V1_4::DataRegStateResult q = {}; q.base = data12(p);
++    // Old SITRIL supplies neither LTE VOPS nor NR capabilities. Leave unknown.
++    return q;
++}
++static hidl_vec<V1_2::CellInfo> cells12(const hidl_vec<CellInfo>& p) {
++    hidl_vec<V1_2::CellInfo> q; q.resize(p.size());
++    for (size_t i = 0; i < p.size(); ++i) {
++        const auto& a = p[i]; auto& b = q[i];
++        b.cellInfoType = a.cellInfoType; b.registered = a.registered;
++        b.timeStampType = a.timeStampType; b.timeStamp = a.timeStamp;
++        b.connectionStatus = a.registered ? V1_2::CellConnectionStatus::PRIMARY_SERVING : V1_2::CellConnectionStatus::NONE;
++        b.gsm.resize(a.gsm.size());
++        for (size_t j = 0; j < a.gsm.size(); ++j) {
++            b.gsm[j].cellIdentityGsm.base = a.gsm[j].cellIdentityGsm;
++            b.gsm[j].signalStrengthGsm = a.gsm[j].signalStrengthGsm;
++        }
++        b.wcdma.resize(a.wcdma.size());
++        for (size_t j = 0; j < a.wcdma.size(); ++j) {
++            b.wcdma[j].cellIdentityWcdma.base = a.wcdma[j].cellIdentityWcdma;
++            b.wcdma[j].signalStrengthWcdma = {a.wcdma[j].signalStrengthWcdma, INT_MAX, INT_MAX};
++        }
++        b.cdma.resize(a.cdma.size());
++        for (size_t j = 0; j < a.cdma.size(); ++j) {
++            b.cdma[j].cellIdentityCdma.base = a.cdma[j].cellIdentityCdma;
++            b.cdma[j].signalStrengthCdma = a.cdma[j].signalStrengthCdma;
++            b.cdma[j].signalStrengthEvdo = a.cdma[j].signalStrengthEvdo;
++        }
++        b.lte.resize(a.lte.size());
++        for (size_t j = 0; j < a.lte.size(); ++j) {
++            b.lte[j].cellIdentityLte.base = a.lte[j].cellIdentityLte;
++            b.lte[j].cellIdentityLte.bandwidth = INT_MAX;
++            b.lte[j].signalStrengthLte = a.lte[j].signalStrengthLte;
++        }
++        b.tdscdma.resize(a.tdscdma.size());
++        for (size_t j = 0; j < a.tdscdma.size(); ++j) {
++            b.tdscdma[j].cellIdentityTdscdma.base = a.tdscdma[j].cellIdentityTdscdma;
++            b.tdscdma[j].cellIdentityTdscdma.uarfcn = INT_MAX;
++            b.tdscdma[j].signalStrengthTdscdma = {INT_MAX, INT_MAX, INT_MAX};
++            auto rscp = a.tdscdma[j].signalStrengthTdscdma.rscp;
++            if (rscp >= 25 && rscp <= 120) b.tdscdma[j].signalStrengthTdscdma.rscp = 120 - rscp;
++        }
++    }
++    return q;
++}
++static hidl_vec<V1_4::CellInfo> cells14(const hidl_vec<CellInfo>& p) {
++    auto old = cells12(p); std::vector<V1_4::CellInfo> out;
++    for (const auto& a : old) {
++        V1_4::CellInfo b = {}; b.isRegistered = a.registered;
++        b.connectionStatus = a.connectionStatus;
++        switch (a.cellInfoType) {
++            case CellInfoType::GSM:
++                if (a.gsm.size() != 1) continue;
++                b.info.gsm(a.gsm[0]); break;
++            case CellInfoType::WCDMA:
++                if (a.wcdma.size() != 1) continue;
++                b.info.wcdma(a.wcdma[0]); break;
++            case CellInfoType::CDMA:
++                if (a.cdma.size() != 1) continue;
++                b.info.cdma(a.cdma[0]); break;
++            case CellInfoType::LTE:
++                if (a.lte.size() != 1) continue;
++                b.info.lte({a.lte[0], {false}}); break;
++            case CellInfoType::TD_SCDMA:
++                if (a.tdscdma.size() != 1) continue;
++                b.info.tdscdma(a.tdscdma[0]); break;
++            default: continue; // No safe-union discriminator for an unknown legacy cell.
++        }
++        out.push_back(b);
++    }
++    return out;
++}
++static constexpr uint32_t bit(RadioAccessFamily f) { return static_cast<uint32_t>(f); }
++static constexpr uint32_t gsm = bit(RadioAccessFamily::GSM) | bit(RadioAccessFamily::GPRS) | bit(RadioAccessFamily::EDGE);
++static constexpr uint32_t wcdma = bit(RadioAccessFamily::UMTS) | bit(RadioAccessFamily::HSDPA) | bit(RadioAccessFamily::HSUPA) | bit(RadioAccessFamily::HSPA) | bit(RadioAccessFamily::HSPAP);
++static constexpr uint32_t cdma = bit(RadioAccessFamily::IS95A) | bit(RadioAccessFamily::IS95B) | bit(RadioAccessFamily::ONE_X_RTT);
++static constexpr uint32_t evdo = bit(RadioAccessFamily::EVDO_0) | bit(RadioAccessFamily::EVDO_A) | bit(RadioAccessFamily::EVDO_B) | bit(RadioAccessFamily::EHRPD);
++static constexpr uint32_t lte = bit(RadioAccessFamily::LTE) | bit(RadioAccessFamily::LTE_CA);
++static constexpr uint32_t td = bit(RadioAccessFamily::TD_SCDMA);
++static constexpr uint32_t modes[] = {
++    gsm|wcdma, gsm, wcdma, gsm|wcdma, cdma|evdo, cdma, evdo,
++    gsm|wcdma|cdma|evdo, lte|cdma|evdo, lte|gsm|wcdma, lte|gsm|wcdma|cdma|evdo,
++    lte, lte|wcdma, td, td|wcdma, lte|td, td|gsm, lte|td|gsm,
++    td|gsm|wcdma, lte|td|wcdma, lte|td|gsm|wcdma,
++    td|cdma|evdo|gsm|wcdma, lte|td|cdma|evdo|gsm|wcdma
++};
++static int networkMode(uint32_t mask) {
++    for (uint32_t group : {gsm, wcdma, cdma, evdo, lte})
++        if (mask & group) mask |= group;
++    for (size_t i = 0; i < sizeof(modes)/sizeof(modes[0]); ++i)
++        if (mask == modes[i]) return i;
++    return -1; // Do not silently turn an unrepresentable bitmap into a wider mode.
++}
++static int bitmapResponse(int slotId, int responseType, int serial, RIL_Errno e,
++                          void* response, size_t responseLen) {
++    auto service = radioService[slotId];
++    if (!service->mRadioResponseV1_4) return 0;
++    RadioResponseInfo info = {};
++    int mode = responseInt(info, serial, responseType, e, response, responseLen);
++    uint32_t mask = 0;
++    if (info.error == RadioError::NONE) {
++        if (mode < 0 || size_t(mode) >= sizeof(modes)/sizeof(modes[0]))
++            info.error = RadioError::INVALID_RESPONSE;
++        else mask = modes[mode];
++    }
++    auto ret = service->mRadioResponseV1_4->getPreferredNetworkTypeBitmapResponse(info, mask);
++    service->checkReturnStatus(ret); return 0;
++}
++static int setBitmapResponse(int slotId, int responseType, int serial, RIL_Errno e,
++                             void*, size_t) {
++    auto service = radioService[slotId];
++    if (!service->mRadioResponseV1_4) return 0;
++    RadioResponseInfo info = {}; populateResponseInfo(info, serial, responseType, e);
++    auto ret = service->mRadioResponseV1_4->setPreferredNetworkTypeBitmapResponse(info);
++    service->checkReturnStatus(ret); return 0;
++}
++} // namespace legacy14
++
++Return<void> RadioImpl::startNetworkScan_1_2(int32_t serial,
++            const ::android::hardware::radio::V1_2::NetworkScanRequest& request) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_2) {
++            auto ret = mRadioResponseV1_2->startNetworkScanResponse(info); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::setIndicationFilter_1_2(int32_t serial,
++            hidl_bitfield<::android::hardware::radio::V1_2::IndicationFilter> indicationFilter) {
++    // Preserve the original bit positions; new physical-channel filtering is unsupported.
++    if (indicationFilter & ~uint32_t(7)) {
++        return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_2) {
++            auto ret = mRadioResponseV1_2->setIndicationFilterResponse(info); checkReturnStatus(ret);
++        }
++    });
++    }
++    return setIndicationFilter(serial, static_cast<int32_t>(indicationFilter));
++}
++
++Return<void> RadioImpl::setSignalStrengthReportingCriteria(int32_t serial, int32_t hysteresisMs,
++            int32_t hysteresisDb, const hidl_vec<int32_t>& thresholdsDbm,
++            ::android::hardware::radio::V1_2::AccessNetwork accessNetwork) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_2) {
++            auto ret = mRadioResponseV1_2->setSignalStrengthReportingCriteriaResponse(info); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::setLinkCapacityReportingCriteria(int32_t serial, int32_t hysteresisMs,
++            int32_t hysteresisDlKbps, int32_t hysteresisUlKbps,
++            const hidl_vec<int32_t>& thresholdsDownlinkKbps,
++            const hidl_vec<int32_t>& thresholdsUplinkKbps,
++            ::android::hardware::radio::V1_2::AccessNetwork accessNetwork) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_2) {
++            auto ret = mRadioResponseV1_2->setLinkCapacityReportingCriteriaResponse(info); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::setupDataCall_1_2(int32_t serial,
++            ::android::hardware::radio::V1_2::AccessNetwork accessNetwork,
++            const ::android::hardware::radio::V1_0::DataProfileInfo& dataProfileInfo,
++            bool modemCognitive, bool roamingAllowed, bool isRoaming,
++            ::android::hardware::radio::V1_2::DataRequestReason reason,
++            const hidl_vec<hidl_string>& addresses, const hidl_vec<hidl_string>& dnses) {
++    if (reason != V1_2::DataRequestReason::NORMAL || legacy14::rat(int(accessNetwork)) == RadioTechnology::UNKNOWN) {
++        RequestInfo* ri = android::addRequestToList(serial, mSlotId, RIL_REQUEST_SETUP_DATA_CALL);
++        if (ri) sendErrorResponse(ri, RIL_E_REQUEST_NOT_SUPPORTED);
++        return Void();
++    }
++    return setupDataCall(serial, legacy14::rat(int(accessNetwork)), dataProfileInfo,
++                         modemCognitive, roamingAllowed, isRoaming);
++}
++
++Return<void> RadioImpl::deactivateDataCall_1_2(int32_t serial, int32_t cid,
++            ::android::hardware::radio::V1_2::DataRequestReason reason) {
++    if (reason != V1_2::DataRequestReason::NORMAL && reason != V1_2::DataRequestReason::SHUTDOWN) {
++        return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_2) {
++            auto ret = mRadioResponseV1_2->deactivateDataCallResponse(info); checkReturnStatus(ret);
++        }
++    });
++    }
++    return deactivateDataCall(serial, cid, reason == V1_2::DataRequestReason::SHUTDOWN);
++}
++
++Return<void> RadioImpl::setSystemSelectionChannels(int32_t serial, bool specifyChannels,
++            const hidl_vec<::android::hardware::radio::V1_1::RadioAccessSpecifier>& specifiers) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_3) {
++            auto ret = mRadioResponseV1_3->setSystemSelectionChannelsResponse(info); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::enableModem(int32_t serial, bool on) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_3) {
++            auto ret = mRadioResponseV1_3->enableModemResponse(info); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::getModemStackStatus(int32_t serial) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_3) {
++            auto ret = mRadioResponseV1_3->getModemStackStatusResponse(info, false); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::setupDataCall_1_4(int32_t serial,
++            ::android::hardware::radio::V1_4::AccessNetwork accessNetwork,
++            const ::android::hardware::radio::V1_4::DataProfileInfo& dataProfileInfo,
++            bool roamingAllowed, ::android::hardware::radio::V1_2::DataRequestReason reason,
++            const hidl_vec<hidl_string>& addresses, const hidl_vec<hidl_string>& dnses) {
++    auto p = legacy14::profile(dataProfileInfo);
++    if (p.protocol.empty() || p.roamingProtocol.empty()) {
++        return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_4) {
++            auto ret = mRadioResponseV1_4->setupDataCallResponse_1_4(info, {}); checkReturnStatus(ret);
++        }
++    });
++    }
++    return setupDataCall_1_2(serial, static_cast<V1_2::AccessNetwork>(accessNetwork), p,
++        dataProfileInfo.persistent, roamingAllowed, mDataRoaming.load(), reason, addresses, dnses);
++}
++
++Return<void> RadioImpl::setInitialAttachApn_1_4(int32_t serial,
++            const ::android::hardware::radio::V1_4::DataProfileInfo& dataProfileInfo) {
++    auto p = legacy14::profile(dataProfileInfo);
++    if (p.protocol.empty() || p.roamingProtocol.empty()) {
++        return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_4) {
++            auto ret = mRadioResponseV1_4->setInitialAttachApnResponse(info); checkReturnStatus(ret);
++        }
++    });
++    }
++    return setInitialAttachApn(serial, p, dataProfileInfo.persistent, mDataRoaming.load());
++}
++
++Return<void> RadioImpl::setDataProfile_1_4(int32_t serial,
++            const hidl_vec<::android::hardware::radio::V1_4::DataProfileInfo>& profiles) {
++    hidl_vec<DataProfileInfo> converted; converted.resize(profiles.size());
++    for (size_t i = 0; i < profiles.size(); ++i) {
++        converted[i] = legacy14::profile(profiles[i]);
++        if (converted[i].protocol.empty() || converted[i].roamingProtocol.empty()) {
++            return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_4) {
++            auto ret = mRadioResponseV1_4->setDataProfileResponse(info); checkReturnStatus(ret);
++        }
++    });
++        }
++    }
++    return setDataProfile(serial, converted, mDataRoaming.load());
++}
++
++Return<void> RadioImpl::emergencyDial(int32_t serial,
++            const ::android::hardware::radio::V1_0::Dial& dialInfo,
++            hidl_bitfield<android::hardware::radio::V1_4::EmergencyServiceCategory> categories,
++            const hidl_vec<hidl_string>& urns,
++            ::android::hardware::radio::V1_4::EmergencyCallRouting routing,
++            bool fromEmergencyDialer, bool isTesting) {
++    // SITRIL CCscService::DoDial classifies numbers through its emergency-number
++    // tables. Preserve that pre-1.4 dialing path and use the new response callback.
++    // The old ABI cannot express test-only calls or category/URN overrides.
++    if (isTesting || urns.size() != 0) {
++        return reply(serial, RadioError::INVALID_ARGUMENTS, [&](const RadioResponseInfo& info) {
++            if (mRadioResponseV1_4) {
++                auto ret = mRadioResponseV1_4->emergencyDialResponse(info); checkReturnStatus(ret);
++            }
++        });
++    }
++    static CommandInfo command = {RIL_REQUEST_DIAL,
++        [](int slot, int type, int token, RIL_Errno error, void*, size_t) -> int {
++            auto service = radioService[slot];
++            if (service->mRadioResponseV1_4) {
++                RadioResponseInfo info = {}; populateResponseInfo(info, token, type, error);
++                auto ret = service->mRadioResponseV1_4->emergencyDialResponse(info);
++                service->checkReturnStatus(ret);
++            }
++            return 0;
++        }};
++    return dialLegacy(serial, dialInfo, &command);
++}
++
++Return<void> RadioImpl::startNetworkScan_1_4(int32_t serial,
++            const ::android::hardware::radio::V1_2::NetworkScanRequest& request) {
++    return reply(serial, RadioError::MODEM_ERR, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_4) {
++            auto ret = mRadioResponseV1_4->startNetworkScanResponse_1_4(info); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::getPreferredNetworkTypeBitmap(int32_t serial) {
++    // Request-local callback routing avoids cross-slot / serial bookkeeping races.
++    static CommandInfo command = {RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE, legacy14::bitmapResponse};
++    RequestInfo* ri = android::addRequestToList(serial, mSlotId, command.requestNumber);
++    if (ri) { ri->pCI = &command; CALL_ONREQUEST(command.requestNumber, nullptr, 0, ri, mSlotId); }
++    return Void();
++}
++
++Return<void> RadioImpl::setPreferredNetworkTypeBitmap(
++            int32_t serial, hidl_bitfield<RadioAccessFamily> networkTypeBitmap) {
++    int mode = legacy14::networkMode(networkTypeBitmap);
++    if (mode < 0) {
++        return reply(serial, RadioError::INVALID_ARGUMENTS, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_4) {
++            auto ret = mRadioResponseV1_4->setPreferredNetworkTypeBitmapResponse(info); checkReturnStatus(ret);
++        }
++    });
++    }
++    static CommandInfo command = {RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE, legacy14::setBitmapResponse};
++    RequestInfo* ri = android::addRequestToList(serial, mSlotId, command.requestNumber);
++    if (ri) { ri->pCI = &command; CALL_ONREQUEST(command.requestNumber, &mode, sizeof(mode), ri, mSlotId); }
++    return Void();
++}
++
++Return<void> RadioImpl::setAllowedCarriers_1_4(int32_t serial,
++            const ::android::hardware::radio::V1_4::CarrierRestrictionsWithPriority& carriers,
++            ::android::hardware::radio::V1_4::SimLockMultiSimPolicy multiSimPolicy) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_4) {
++            auto ret = mRadioResponseV1_4->setAllowedCarriersResponse_1_4(info); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::getAllowedCarriers_1_4(int32_t serial) {
++    return reply(serial, RadioError::REQUEST_NOT_SUPPORTED, [&](const RadioResponseInfo& info) {
++        if (mRadioResponseV1_4) {
++            auto ret = mRadioResponseV1_4->getAllowedCarriersResponse_1_4(info, {}, V1_4::SimLockMultiSimPolicy::NO_MULTISIM_POLICY); checkReturnStatus(ret);
++        }
++    });
++}
++
++Return<void> RadioImpl::getSignalStrength_1_4(int32_t serial) {
++    dispatchVoid(serial, mSlotId, RIL_REQUEST_SIGNAL_STRENGTH); return Void();
++}
+diff --git a/libril/tests/README.md b/libril/tests/README.md
+new file mode 100644
+index 0000000..7af3f77
+--- /dev/null
++++ b/libril/tests/README.md
+@@ -0,0 +1,22 @@
++# Legacy Radio 1.4 bridge tests
++
++Build `m86-radio14-test` with the m86 userdebug product. The executable is installed
++under `data/nativetest64/m86-radio14-test`, not included in vendor.img.
++
++The fixture compiles the real RIL request bookkeeping and HAL bridge together,
++uses generated 1.4 response/indication stubs and a fake vendor onRequest callback,
++and never connects to a real modem or registers a binder service. This avoids
++interposing two copies of libril's global objects in the same executable.
++
++The 109 assertions cover static dual-slot card mapping, invalid application counts,
++network-mode bitmap conversion, identical serials on different slots completed out
++of order, request-specific callbacks versus inherited callbacks, legacy data-call
++arguments and roaming protocol selection, rejection of IWLAN handover, IP-list
++conversion, unavailable signal measurements, zero-length responses, and old-client
++callback fallback. The additional m86 cases verify the measured 60-byte SITRIL
++layout, poisoned unused words, LTE/TD-SCDMA offsets, solicited and unsolicited
++1.4 dispatch, malformed lengths, other RIL versions and input-buffer preservation. `radio14_mocks.h` was generated from the platform's 1.4 HIDL
++headers; unused callbacks simply return Void.
++
++A passing fixture establishes conversion/dispatch behavior, not modem operation,
++SIM detection, network attachment, calls, emergency calls or IMS interoperability.
+diff --git a/libril/tests/radio14_mocks.h b/libril/tests/radio14_mocks.h
+new file mode 100644
+index 0000000..ba227ec
+--- /dev/null
++++ b/libril/tests/radio14_mocks.h
+@@ -0,0 +1,228 @@
++// Generated from Android radio 1.4 HIDL headers; test callbacks never access a modem.
++struct MockIRadioResponse : V1_4::IRadioResponse {
++    std::string last;
++    RadioResponseInfo lastInfo = {};
++    V1_4::CardStatus card = {};
++    ::android::hardware::Return<void> getIccCardStatusResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::CardStatus& cardStatus) override { last = "getIccCardStatusResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> supplyIccPinForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t remainingRetries) override { last = "supplyIccPinForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> supplyIccPukForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t remainingRetries) override { last = "supplyIccPukForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> supplyIccPin2ForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t remainingRetries) override { last = "supplyIccPin2ForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> supplyIccPuk2ForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t remainingRetries) override { last = "supplyIccPuk2ForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> changeIccPinForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t remainingRetries) override { last = "changeIccPinForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> changeIccPin2ForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t remainingRetries) override { last = "changeIccPin2ForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> supplyNetworkDepersonalizationResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t remainingRetries) override { last = "supplyNetworkDepersonalizationResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCurrentCallsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::Call>& calls) override { last = "getCurrentCallsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> dialResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "dialResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getIMSIForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& imsi) override { last = "getIMSIForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> hangupConnectionResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "hangupConnectionResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> hangupWaitingOrBackgroundResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "hangupWaitingOrBackgroundResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> hangupForegroundResumeBackgroundResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "hangupForegroundResumeBackgroundResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> switchWaitingOrHoldingAndActiveResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "switchWaitingOrHoldingAndActiveResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> conferenceResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "conferenceResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> rejectCallResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "rejectCallResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getLastCallFailCauseResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::LastCallFailCauseInfo& failCauseinfo) override { last = "getLastCallFailCauseResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getSignalStrengthResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::SignalStrength& sigStrength) override { last = "getSignalStrengthResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getVoiceRegistrationStateResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::VoiceRegStateResult& voiceRegResponse) override { last = "getVoiceRegistrationStateResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getDataRegistrationStateResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::DataRegStateResult& dataRegResponse) override { last = "getDataRegistrationStateResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getOperatorResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& longName, const ::android::hardware::hidl_string& shortName, const ::android::hardware::hidl_string& numeric) override { last = "getOperatorResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setRadioPowerResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setRadioPowerResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendDtmfResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "sendDtmfResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendSmsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::SendSmsResult& sms) override { last = "sendSmsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendSMSExpectMoreResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::SendSmsResult& sms) override { last = "sendSMSExpectMoreResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setupDataCallResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::SetupDataCallResult& dcResponse) override { last = "setupDataCallResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> iccIOForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::IccIoResult& iccIo) override { last = "iccIOForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendUssdResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "sendUssdResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> cancelPendingUssdResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "cancelPendingUssdResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getClirResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t n, int32_t m) override { last = "getClirResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setClirResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setClirResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCallForwardStatusResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::CallForwardInfo>& callForwardInfos) override { last = "getCallForwardStatusResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setCallForwardResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCallForwardResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCallWaitingResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, bool enable, int32_t serviceClass) override { last = "getCallWaitingResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setCallWaitingResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCallWaitingResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> acknowledgeLastIncomingGsmSmsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "acknowledgeLastIncomingGsmSmsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> acceptCallResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "acceptCallResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> deactivateDataCallResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "deactivateDataCallResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getFacilityLockForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t response) override { last = "getFacilityLockForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setFacilityLockForAppResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t retry) override { last = "setFacilityLockForAppResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setBarringPasswordResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setBarringPasswordResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getNetworkSelectionModeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, bool manual) override { last = "getNetworkSelectionModeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setNetworkSelectionModeAutomaticResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setNetworkSelectionModeAutomaticResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setNetworkSelectionModeManualResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setNetworkSelectionModeManualResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getAvailableNetworksResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::OperatorInfo>& networkInfos) override { last = "getAvailableNetworksResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> startDtmfResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "startDtmfResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> stopDtmfResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "stopDtmfResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getBasebandVersionResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& version) override { last = "getBasebandVersionResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> separateConnectionResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "separateConnectionResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setMuteResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setMuteResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getMuteResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, bool enable) override { last = "getMuteResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getClipResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, ::android::hardware::radio::V1_0::ClipStatus status) override { last = "getClipResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getDataCallListResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::SetupDataCallResult>& dcResponse) override { last = "getDataCallListResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setSuppServiceNotificationsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setSuppServiceNotificationsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> writeSmsToSimResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t index) override { last = "writeSmsToSimResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> deleteSmsOnSimResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "deleteSmsOnSimResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setBandModeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setBandModeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getAvailableBandModesResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::RadioBandMode>& bandModes) override { last = "getAvailableBandModesResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendEnvelopeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& commandResponse) override { last = "sendEnvelopeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendTerminalResponseToSimResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "sendTerminalResponseToSimResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> handleStkCallSetupRequestFromSimResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "handleStkCallSetupRequestFromSimResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> explicitCallTransferResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "explicitCallTransferResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setPreferredNetworkTypeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setPreferredNetworkTypeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getPreferredNetworkTypeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, ::android::hardware::radio::V1_0::PreferredNetworkType nwType) override { last = "getPreferredNetworkTypeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getNeighboringCidsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::NeighboringCell>& cells) override { last = "getNeighboringCidsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setLocationUpdatesResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setLocationUpdatesResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setCdmaSubscriptionSourceResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCdmaSubscriptionSourceResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setCdmaRoamingPreferenceResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCdmaRoamingPreferenceResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCdmaRoamingPreferenceResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, ::android::hardware::radio::V1_0::CdmaRoamingType type) override { last = "getCdmaRoamingPreferenceResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setTTYModeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setTTYModeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getTTYModeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, ::android::hardware::radio::V1_0::TtyMode mode) override { last = "getTTYModeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setPreferredVoicePrivacyResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setPreferredVoicePrivacyResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getPreferredVoicePrivacyResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, bool enable) override { last = "getPreferredVoicePrivacyResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendCDMAFeatureCodeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "sendCDMAFeatureCodeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendBurstDtmfResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "sendBurstDtmfResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendCdmaSmsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::SendSmsResult& sms) override { last = "sendCdmaSmsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> acknowledgeLastIncomingCdmaSmsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "acknowledgeLastIncomingCdmaSmsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getGsmBroadcastConfigResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::GsmBroadcastSmsConfigInfo>& configs) override { last = "getGsmBroadcastConfigResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setGsmBroadcastConfigResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setGsmBroadcastConfigResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setGsmBroadcastActivationResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setGsmBroadcastActivationResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCdmaBroadcastConfigResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::CdmaBroadcastSmsConfigInfo>& configs) override { last = "getCdmaBroadcastConfigResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setCdmaBroadcastConfigResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCdmaBroadcastConfigResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setCdmaBroadcastActivationResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCdmaBroadcastActivationResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCDMASubscriptionResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& mdn, const ::android::hardware::hidl_string& hSid, const ::android::hardware::hidl_string& hNid, const ::android::hardware::hidl_string& min, const ::android::hardware::hidl_string& prl) override { last = "getCDMASubscriptionResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> writeSmsToRuimResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, uint32_t index) override { last = "writeSmsToRuimResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> deleteSmsOnRuimResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "deleteSmsOnRuimResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getDeviceIdentityResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& imei, const ::android::hardware::hidl_string& imeisv, const ::android::hardware::hidl_string& esn, const ::android::hardware::hidl_string& meid) override { last = "getDeviceIdentityResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> exitEmergencyCallbackModeResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "exitEmergencyCallbackModeResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getSmscAddressResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& smsc) override { last = "getSmscAddressResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setSmscAddressResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setSmscAddressResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> reportSmsMemoryStatusResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "reportSmsMemoryStatusResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> reportStkServiceIsRunningResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "reportStkServiceIsRunningResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCdmaSubscriptionSourceResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, ::android::hardware::radio::V1_0::CdmaSubscriptionSource source) override { last = "getCdmaSubscriptionSourceResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> requestIsimAuthenticationResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& response) override { last = "requestIsimAuthenticationResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> acknowledgeIncomingGsmSmsWithPduResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "acknowledgeIncomingGsmSmsWithPduResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendEnvelopeWithStatusResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::IccIoResult& iccIo) override { last = "sendEnvelopeWithStatusResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getVoiceRadioTechnologyResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, ::android::hardware::radio::V1_0::RadioTechnology rat) override { last = "getVoiceRadioTechnologyResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCellInfoListResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::CellInfo>& cellInfo) override { last = "getCellInfoListResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setCellInfoListRateResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCellInfoListRateResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setInitialAttachApnResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setInitialAttachApnResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getImsRegistrationStateResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, bool isRegistered, ::android::hardware::radio::V1_0::RadioTechnologyFamily ratFamily) override { last = "getImsRegistrationStateResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendImsSmsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::SendSmsResult& sms) override { last = "sendImsSmsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> iccTransmitApduBasicChannelResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::IccIoResult& result) override { last = "iccTransmitApduBasicChannelResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> iccOpenLogicalChannelResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t channelId, const ::android::hardware::hidl_vec<int8_t>& selectResponse) override { last = "iccOpenLogicalChannelResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> iccCloseLogicalChannelResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "iccCloseLogicalChannelResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> iccTransmitApduLogicalChannelResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::IccIoResult& result) override { last = "iccTransmitApduLogicalChannelResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> nvReadItemResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_string& result) override { last = "nvReadItemResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> nvWriteItemResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "nvWriteItemResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> nvWriteCdmaPrlResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "nvWriteCdmaPrlResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> nvResetConfigResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "nvResetConfigResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setUiccSubscriptionResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setUiccSubscriptionResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setDataAllowedResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setDataAllowedResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getHardwareConfigResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::HardwareConfig>& config) override { last = "getHardwareConfigResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> requestIccSimAuthenticationResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::IccIoResult& result) override { last = "requestIccSimAuthenticationResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setDataProfileResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setDataProfileResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> requestShutdownResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "requestShutdownResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getRadioCapabilityResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::RadioCapability& rc) override { last = "getRadioCapabilityResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setRadioCapabilityResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::RadioCapability& rc) override { last = "setRadioCapabilityResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> startLceServiceResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::LceStatusInfo& statusInfo) override { last = "startLceServiceResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> stopLceServiceResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::LceStatusInfo& statusInfo) override { last = "stopLceServiceResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> pullLceDataResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::LceDataInfo& lceInfo) override { last = "pullLceDataResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getModemActivityInfoResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_0::ActivityStatsInfo& activityInfo) override { last = "getModemActivityInfoResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setAllowedCarriersResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, int32_t numAllowed) override { last = "setAllowedCarriersResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getAllowedCarriersResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, bool allAllowed, const ::android::hardware::radio::V1_0::CarrierRestrictions& carriers) override { last = "getAllowedCarriersResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> sendDeviceStateResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "sendDeviceStateResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setIndicationFilterResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setIndicationFilterResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setSimCardPowerResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setSimCardPowerResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> acknowledgeRequest(int32_t serial) override { last = "acknowledgeRequest"; return Void(); }
++    ::android::hardware::Return<void> setCarrierInfoForImsiEncryptionResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setCarrierInfoForImsiEncryptionResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setSimCardPowerResponse_1_1(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setSimCardPowerResponse_1_1"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> startNetworkScanResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "startNetworkScanResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> stopNetworkScanResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "stopNetworkScanResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> startKeepaliveResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_1::KeepaliveStatus& status) override { last = "startKeepaliveResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> stopKeepaliveResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "stopKeepaliveResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCellInfoListResponse_1_2(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_2::CellInfo>& cellInfo) override { last = "getCellInfoListResponse_1_2"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getIccCardStatusResponse_1_2(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_2::CardStatus& cardStatus) override { last = "getIccCardStatusResponse_1_2"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setSignalStrengthReportingCriteriaResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setSignalStrengthReportingCriteriaResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setLinkCapacityReportingCriteriaResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setLinkCapacityReportingCriteriaResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCurrentCallsResponse_1_2(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_2::Call>& calls) override { last = "getCurrentCallsResponse_1_2"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getSignalStrengthResponse_1_2(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_2::SignalStrength& signalStrength) override { last = "getSignalStrengthResponse_1_2"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getVoiceRegistrationStateResponse_1_2(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_2::VoiceRegStateResult& voiceRegResponse) override { last = "getVoiceRegistrationStateResponse_1_2"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getDataRegistrationStateResponse_1_2(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_2::DataRegStateResult& dataRegResponse) override { last = "getDataRegistrationStateResponse_1_2"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setSystemSelectionChannelsResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setSystemSelectionChannelsResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> enableModemResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "enableModemResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getModemStackStatusResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, bool isEnabled) override { last = "getModemStackStatusResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> emergencyDialResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "emergencyDialResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> startNetworkScanResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "startNetworkScanResponse_1_4"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getCellInfoListResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_4::CellInfo>& cellInfo) override { last = "getCellInfoListResponse_1_4"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getDataRegistrationStateResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_4::DataRegStateResult& dataRegResponse) override { last = "getDataRegistrationStateResponse_1_4"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getIccCardStatusResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_4::CardStatus& cardStatus) override { last = "getIccCardStatusResponse_1_4"; lastInfo = info; card = cardStatus; return Void(); }
++    ::android::hardware::Return<void> getPreferredNetworkTypeBitmapResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, ::android::hardware::hidl_bitfield<::android::hardware::radio::V1_4::RadioAccessFamily> networkTypeBitmap) override { last = "getPreferredNetworkTypeBitmapResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setPreferredNetworkTypeBitmapResponse(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setPreferredNetworkTypeBitmapResponse"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getDataCallListResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_4::SetupDataCallResult>& dcResponse) override { last = "getDataCallListResponse_1_4"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setupDataCallResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_4::SetupDataCallResult& dcResponse) override { last = "setupDataCallResponse_1_4"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> setAllowedCarriersResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info) override { last = "setAllowedCarriersResponse_1_4"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getAllowedCarriersResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_4::CarrierRestrictionsWithPriority& carriers, ::android::hardware::radio::V1_4::SimLockMultiSimPolicy multiSimPolicy) override { last = "getAllowedCarriersResponse_1_4"; lastInfo = info; return Void(); }
++    ::android::hardware::Return<void> getSignalStrengthResponse_1_4(const ::android::hardware::radio::V1_0::RadioResponseInfo& info, const ::android::hardware::radio::V1_4::SignalStrength& signalStrength) override { last = "getSignalStrengthResponse_1_4"; lastInfo = info; return Void(); }
++};
++struct MockIRadioIndication : V1_4::IRadioIndication {
++    std::string last;
++    RadioResponseInfo lastInfo = {};
++    V1_4::CardStatus card = {};
++    ::android::hardware::Return<void> radioStateChanged(::android::hardware::radio::V1_0::RadioIndicationType type, ::android::hardware::radio::V1_0::RadioState radioState) override { last = "radioStateChanged"; return Void(); }
++    ::android::hardware::Return<void> callStateChanged(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "callStateChanged"; return Void(); }
++    ::android::hardware::Return<void> networkStateChanged(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "networkStateChanged"; return Void(); }
++    ::android::hardware::Return<void> newSms(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<uint8_t>& pdu) override { last = "newSms"; return Void(); }
++    ::android::hardware::Return<void> newSmsStatusReport(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<uint8_t>& pdu) override { last = "newSmsStatusReport"; return Void(); }
++    ::android::hardware::Return<void> newSmsOnSim(::android::hardware::radio::V1_0::RadioIndicationType type, int32_t recordNumber) override { last = "newSmsOnSim"; return Void(); }
++    ::android::hardware::Return<void> onUssd(::android::hardware::radio::V1_0::RadioIndicationType type, ::android::hardware::radio::V1_0::UssdModeType modeType, const ::android::hardware::hidl_string& msg) override { last = "onUssd"; return Void(); }
++    ::android::hardware::Return<void> nitzTimeReceived(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_string& nitzTime, uint64_t receivedTime) override { last = "nitzTimeReceived"; return Void(); }
++    ::android::hardware::Return<void> currentSignalStrength(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::SignalStrength& signalStrength) override { last = "currentSignalStrength"; return Void(); }
++    ::android::hardware::Return<void> dataCallListChanged(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::SetupDataCallResult>& dcList) override { last = "dataCallListChanged"; return Void(); }
++    ::android::hardware::Return<void> suppSvcNotify(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::SuppSvcNotification& suppSvc) override { last = "suppSvcNotify"; return Void(); }
++    ::android::hardware::Return<void> stkSessionEnd(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "stkSessionEnd"; return Void(); }
++    ::android::hardware::Return<void> stkProactiveCommand(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_string& cmd) override { last = "stkProactiveCommand"; return Void(); }
++    ::android::hardware::Return<void> stkEventNotify(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_string& cmd) override { last = "stkEventNotify"; return Void(); }
++    ::android::hardware::Return<void> stkCallSetup(::android::hardware::radio::V1_0::RadioIndicationType type, int64_t timeout) override { last = "stkCallSetup"; return Void(); }
++    ::android::hardware::Return<void> simSmsStorageFull(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "simSmsStorageFull"; return Void(); }
++    ::android::hardware::Return<void> simRefresh(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::SimRefreshResult& refreshResult) override { last = "simRefresh"; return Void(); }
++    ::android::hardware::Return<void> callRing(::android::hardware::radio::V1_0::RadioIndicationType type, bool isGsm, const ::android::hardware::radio::V1_0::CdmaSignalInfoRecord& record) override { last = "callRing"; return Void(); }
++    ::android::hardware::Return<void> simStatusChanged(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "simStatusChanged"; return Void(); }
++    ::android::hardware::Return<void> cdmaNewSms(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::CdmaSmsMessage& msg) override { last = "cdmaNewSms"; return Void(); }
++    ::android::hardware::Return<void> newBroadcastSms(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<uint8_t>& data) override { last = "newBroadcastSms"; return Void(); }
++    ::android::hardware::Return<void> cdmaRuimSmsStorageFull(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "cdmaRuimSmsStorageFull"; return Void(); }
++    ::android::hardware::Return<void> restrictedStateChanged(::android::hardware::radio::V1_0::RadioIndicationType type, ::android::hardware::radio::V1_0::PhoneRestrictedState state) override { last = "restrictedStateChanged"; return Void(); }
++    ::android::hardware::Return<void> enterEmergencyCallbackMode(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "enterEmergencyCallbackMode"; return Void(); }
++    ::android::hardware::Return<void> cdmaCallWaiting(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::CdmaCallWaiting& callWaitingRecord) override { last = "cdmaCallWaiting"; return Void(); }
++    ::android::hardware::Return<void> cdmaOtaProvisionStatus(::android::hardware::radio::V1_0::RadioIndicationType type, ::android::hardware::radio::V1_0::CdmaOtaProvisionStatus status) override { last = "cdmaOtaProvisionStatus"; return Void(); }
++    ::android::hardware::Return<void> cdmaInfoRec(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::CdmaInformationRecords& records) override { last = "cdmaInfoRec"; return Void(); }
++    ::android::hardware::Return<void> indicateRingbackTone(::android::hardware::radio::V1_0::RadioIndicationType type, bool start) override { last = "indicateRingbackTone"; return Void(); }
++    ::android::hardware::Return<void> resendIncallMute(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "resendIncallMute"; return Void(); }
++    ::android::hardware::Return<void> cdmaSubscriptionSourceChanged(::android::hardware::radio::V1_0::RadioIndicationType type, ::android::hardware::radio::V1_0::CdmaSubscriptionSource cdmaSource) override { last = "cdmaSubscriptionSourceChanged"; return Void(); }
++    ::android::hardware::Return<void> cdmaPrlChanged(::android::hardware::radio::V1_0::RadioIndicationType type, int32_t version) override { last = "cdmaPrlChanged"; return Void(); }
++    ::android::hardware::Return<void> exitEmergencyCallbackMode(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "exitEmergencyCallbackMode"; return Void(); }
++    ::android::hardware::Return<void> rilConnected(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "rilConnected"; return Void(); }
++    ::android::hardware::Return<void> voiceRadioTechChanged(::android::hardware::radio::V1_0::RadioIndicationType type, ::android::hardware::radio::V1_0::RadioTechnology rat) override { last = "voiceRadioTechChanged"; return Void(); }
++    ::android::hardware::Return<void> cellInfoList(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::CellInfo>& records) override { last = "cellInfoList"; return Void(); }
++    ::android::hardware::Return<void> imsNetworkStateChanged(::android::hardware::radio::V1_0::RadioIndicationType type) override { last = "imsNetworkStateChanged"; return Void(); }
++    ::android::hardware::Return<void> subscriptionStatusChanged(::android::hardware::radio::V1_0::RadioIndicationType type, bool activate) override { last = "subscriptionStatusChanged"; return Void(); }
++    ::android::hardware::Return<void> srvccStateNotify(::android::hardware::radio::V1_0::RadioIndicationType type, ::android::hardware::radio::V1_0::SrvccState state) override { last = "srvccStateNotify"; return Void(); }
++    ::android::hardware::Return<void> hardwareConfigChanged(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_0::HardwareConfig>& configs) override { last = "hardwareConfigChanged"; return Void(); }
++    ::android::hardware::Return<void> radioCapabilityIndication(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::RadioCapability& rc) override { last = "radioCapabilityIndication"; return Void(); }
++    ::android::hardware::Return<void> onSupplementaryServiceIndication(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::StkCcUnsolSsResult& ss) override { last = "onSupplementaryServiceIndication"; return Void(); }
++    ::android::hardware::Return<void> stkCallControlAlphaNotify(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_string& alpha) override { last = "stkCallControlAlphaNotify"; return Void(); }
++    ::android::hardware::Return<void> lceData(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::LceDataInfo& lce) override { last = "lceData"; return Void(); }
++    ::android::hardware::Return<void> pcoData(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_0::PcoDataInfo& pco) override { last = "pcoData"; return Void(); }
++    ::android::hardware::Return<void> modemReset(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_string& reason) override { last = "modemReset"; return Void(); }
++    ::android::hardware::Return<void> carrierInfoForImsiEncryption(::android::hardware::radio::V1_0::RadioIndicationType info) override { last = "carrierInfoForImsiEncryption"; return Void(); }
++    ::android::hardware::Return<void> networkScanResult(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_1::NetworkScanResult& result) override { last = "networkScanResult"; return Void(); }
++    ::android::hardware::Return<void> keepaliveStatus(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_1::KeepaliveStatus& status) override { last = "keepaliveStatus"; return Void(); }
++    ::android::hardware::Return<void> networkScanResult_1_2(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_2::NetworkScanResult& result) override { last = "networkScanResult_1_2"; return Void(); }
++    ::android::hardware::Return<void> cellInfoList_1_2(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_2::CellInfo>& records) override { last = "cellInfoList_1_2"; return Void(); }
++    ::android::hardware::Return<void> currentLinkCapacityEstimate(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_2::LinkCapacityEstimate& lce) override { last = "currentLinkCapacityEstimate"; return Void(); }
++    ::android::hardware::Return<void> currentPhysicalChannelConfigs(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_2::PhysicalChannelConfig>& configs) override { last = "currentPhysicalChannelConfigs"; return Void(); }
++    ::android::hardware::Return<void> currentSignalStrength_1_2(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_2::SignalStrength& signalStrength) override { last = "currentSignalStrength_1_2"; return Void(); }
++    ::android::hardware::Return<void> currentEmergencyNumberList(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_4::EmergencyNumber>& emergencyNumberList) override { last = "currentEmergencyNumberList"; return Void(); }
++    ::android::hardware::Return<void> cellInfoList_1_4(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_4::CellInfo>& records) override { last = "cellInfoList_1_4"; return Void(); }
++    ::android::hardware::Return<void> networkScanResult_1_4(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_4::NetworkScanResult& result) override { last = "networkScanResult_1_4"; return Void(); }
++    ::android::hardware::Return<void> currentPhysicalChannelConfigs_1_4(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_4::PhysicalChannelConfig>& configs) override { last = "currentPhysicalChannelConfigs_1_4"; return Void(); }
++    ::android::hardware::Return<void> dataCallListChanged_1_4(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::hidl_vec<::android::hardware::radio::V1_4::SetupDataCallResult>& dcList) override { last = "dataCallListChanged_1_4"; return Void(); }
++    ::android::hardware::Return<void> currentSignalStrength_1_4(::android::hardware::radio::V1_0::RadioIndicationType type, const ::android::hardware::radio::V1_4::SignalStrength& signalStrength) override { last = "currentSignalStrength_1_4"; return Void(); }
++};
+diff --git a/libril/tests/radio14_test.cpp b/libril/tests/radio14_test.cpp
+new file mode 100644
+index 0000000..f8f375a
+--- /dev/null
++++ b/libril/tests/radio14_test.cpp
+@@ -0,0 +1,136 @@
++// Copyright 2026 The LineageOS Project
++// SPDX-License-Identifier: Apache-2.0
++// Exercise the actual bridge with a fake vendor function table. Never connects to rild.
++#include "../ril_service.cpp"
++#include "radio14_mocks.h"
++#include <cstdio>
++#include <cstdlib>
++#define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #x); exit(1); } ++checks; } while (0)
++static int checks = 0;
++static int requests = 0;
++static int lastRequest = -1;
++static int lastSlot = -1;
++static int lastMode = -1;
++static std::vector<std::string> requestStrings;
++static RIL_Token pending;
++static void mockRequest(int request, void* data, size_t len, RIL_Token token, RIL_SOCKET_ID slot) {
++    ++requests; lastRequest = request; lastSlot = slot; pending = token;
++    if (request == RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE) {
++        CHECK(len == sizeof(int)); lastMode = *static_cast<int*>(data);
++    }
++    if (request == RIL_REQUEST_SETUP_DATA_CALL) {
++        CHECK(len == 7 * sizeof(char*)); requestStrings.clear();
++        auto strings = static_cast<char**>(data);
++        for (int i = 0; i < 7; ++i) requestStrings.emplace_back(strings[i] ? strings[i] : "");
++    }
++    // Complete only when the test says so, to exercise out-of-order slot responses.
++}
++static void complete(RIL_Errno error = RIL_E_SUCCESS, void* data = nullptr, size_t len = 0) {
++    RIL_onRequestComplete(pending, error, data, len); pending = nullptr;
++}
++template<class F> static void response(int slot, F fn) {
++    auto* lock = radio::getRadioServiceRwlock(slot);
++    pthread_rwlock_rdlock(lock); fn(); pthread_rwlock_unlock(lock);
++}
++int main() {
++    RIL_RadioFunctions vendor = {}; vendor.version = 12; vendor.onRequest = mockRequest;
++    s_vendorFunctions = &vendor;
++    sp<MockIRadioResponse> callbacks[2]; sp<MockIRadioIndication> indications[2];
++    for (int slot = 0; slot < 2; ++slot) {
++        radioService[slot] = new RadioImpl; auto service = radioService[slot]; service->mSlotId = slot;
++        callbacks[slot] = new MockIRadioResponse; indications[slot] = new MockIRadioIndication;
++        service->mRadioResponse = callbacks[slot]; service->mRadioIndication = indications[slot];
++        service->mRadioResponseV1_1 = callbacks[slot]; service->mRadioIndicationV1_1 = indications[slot];
++        service->mRadioResponseV1_2 = callbacks[slot]; service->mRadioIndicationV1_2 = indications[slot];
++        service->mRadioResponseV1_3 = callbacks[slot]; service->mRadioIndicationV1_3 = indications[slot];
++        service->mRadioResponseV1_4 = callbacks[slot]; service->mRadioIndicationV1_4 = indications[slot];
++        RIL_CardStatus_v6 card = {}; card.card_state = RIL_CARDSTATE_ABSENT;
++        card.gsm_umts_subscription_app_index = card.cdma_subscription_app_index = card.ims_subscription_app_index = -1;
++        response(slot, [&] { radio::getIccCardStatusResponse(slot, RESPONSE_SOLICITED, 10, RIL_E_SUCCESS, &card, sizeof(card)); });
++        CHECK(callbacks[slot]->last == "getIccCardStatusResponse_1_4");
++        CHECK(callbacks[slot]->card.base.physicalSlotId == uint32_t(slot));
++        CHECK(callbacks[slot]->lastInfo.error == RadioError::NONE);
++        card.num_applications = -1;
++        response(slot, [&] { radio::getIccCardStatusResponse(slot, RESPONSE_SOLICITED, 11, RIL_E_SUCCESS, &card, sizeof(card)); });
++        CHECK(callbacks[slot]->lastInfo.error == RadioError::INVALID_RESPONSE);
++        card.num_applications = RIL_CARD_MAX_APPS + 1;
++        response(slot, [&] { radio::getIccCardStatusResponse(slot, RESPONSE_SOLICITED, 12, RIL_E_SUCCESS, &card, sizeof(card)); });
++        CHECK(callbacks[slot]->lastInfo.error == RadioError::INVALID_RESPONSE);
++    }
++    for (size_t i = 0; i < sizeof(legacy14::modes)/sizeof(legacy14::modes[0]); ++i) {
++        int mode = legacy14::networkMode(legacy14::modes[i]);
++        CHECK(mode >= 0); CHECK(legacy14::modes[mode] == legacy14::modes[i]);
++    }
++    CHECK(legacy14::networkMode(0) == -1); CHECK(legacy14::networkMode(1u << 30) == -1);
++    auto service = radioService[0]; auto cb = callbacks[0];
++    service->getPreferredNetworkTypeBitmap(20); RIL_Token slot0 = pending;
++    radioService[1]->getPreferredNetworkTypeBitmap(20); RIL_Token slot1 = pending;
++    CHECK(slot0 != slot1); int mode = 9;
++    pending = slot1; complete(RIL_E_SUCCESS, &mode, sizeof(mode));
++    CHECK(callbacks[1]->last == "getPreferredNetworkTypeBitmapResponse");
++    pending = slot0; complete(RIL_E_SUCCESS, &mode, sizeof(mode));
++    CHECK(cb->last == "getPreferredNetworkTypeBitmapResponse");
++    service->setPreferredNetworkTypeBitmap(21, legacy14::lte | legacy14::gsm | legacy14::wcdma);
++    CHECK(lastMode == 9); CHECK(lastSlot == 0); complete();
++    CHECK(cb->last == "setPreferredNetworkTypeBitmapResponse");
++    service->getPreferredNetworkType(22); complete(RIL_E_SUCCESS, &mode, sizeof(mode));
++    CHECK(cb->last == "getPreferredNetworkTypeResponse");
++    int before = requests;
++    service->setPreferredNetworkTypeBitmap(23, 1u << 30);
++    CHECK(requests == before); CHECK(cb->lastInfo.error == RadioError::INVALID_ARGUMENTS);
++    V1_4::DataProfileInfo profile = {}; profile.apn = "test.invalid";
++    profile.protocol = V1_4::PdpProtocolType::IPV4V6; profile.roamingProtocol = V1_4::PdpProtocolType::IP;
++    profile.profileId = DataProfileId::DEFAULT;
++    service->setupDataCall_1_4(24, V1_4::AccessNetwork::EUTRAN, profile, true,
++                             V1_2::DataRequestReason::NORMAL, {}, {});
++    CHECK(lastRequest == RIL_REQUEST_SETUP_DATA_CALL); CHECK(requestStrings[0] == "16");
++    CHECK(requestStrings[2] == "test.invalid"); CHECK(requestStrings[6] == "IPV4V6");
++    complete(RIL_E_RADIO_NOT_AVAILABLE); CHECK(cb->last == "setupDataCallResponse_1_4");
++    service->mDataRoaming = true;
++    service->setupDataCall_1_4(25, V1_4::AccessNetwork::EUTRAN, profile, true,
++                             V1_2::DataRequestReason::NORMAL, {}, {});
++    CHECK(requestStrings[6] == "IP"); complete(RIL_E_RADIO_NOT_AVAILABLE);
++    before = requests;
++    service->setupDataCall_1_4(26, V1_4::AccessNetwork::IWLAN, profile, true,
++                             V1_2::DataRequestReason::HANDOVER, {}, {});
++    CHECK(requests == before); CHECK(cb->lastInfo.error == RadioError::REQUEST_NOT_SUPPORTED);
++    SetupDataCallResult oldData = {}; oldData.type = "IPV4V6";
++    oldData.addresses = "192.0.2.1/32  2001:db8::1/64"; oldData.dnses = "192.0.2.53";
++    oldData.gateways = ""; oldData.pcscf = "2001:db8::5"; oldData.cid = 7; oldData.mtu = 1500;
++    auto newData = legacy14::data(oldData);
++    CHECK(newData.addresses.size() == 2); CHECK(newData.gateways.size() == 0);
++    CHECK(newData.type == V1_4::PdpProtocolType::IPV4V6); CHECK(newData.mtu == 1500);
++    SignalStrength oldSignal = {}; oldSignal.tdScdma.rscp = 80; oldSignal.lte.rsrp = 95;
++    auto newSignal = legacy14::signal14(oldSignal);
++    CHECK(newSignal.lte.rsrp == 95); CHECK(newSignal.tdscdma.rscp == 40);
++    CHECK(newSignal.nr.ssRsrp == INT_MAX); CHECK(newSignal.wcdma.rscp == INT_MAX);
++    response(0, [&] { radio::setupDataCallResponse(0, RESPONSE_SOLICITED, 27, RIL_E_SUCCESS, &mode, 0); });
++    CHECK(cb->lastInfo.error == RadioError::INVALID_RESPONSE);
++    int32_t vendorSignal[15] = {15, 2, 0, 0, 0x22222222, 0, 0, 0x33333333,
++                                20, 95, 10, 50, 8, 4, 80};
++    SignalStrength decoded = {};
++    CHECK(validSignalStrengthSize(sizeof(vendorSignal)));
++    CHECK(!validSignalStrengthSize(59)); CHECK(!validSignalStrengthSize(61));
++    convertRilSignalStrengthToHal(vendorSignal, sizeof(vendorSignal), decoded);
++    CHECK(decoded.gw.signalStrength == 15); CHECK(decoded.lte.signalStrength == 20);
++    CHECK(decoded.lte.rsrp == 95); CHECK(decoded.lte.rsrq == 10);
++    CHECK(decoded.lte.rssnr == 50); CHECK(decoded.lte.cqi == 8);
++    CHECK(decoded.lte.timingAdvance == 4); CHECK(decoded.tdScdma.rscp == 80);
++    CHECK(decoded.cdma.dbm == INT_MAX); CHECK(decoded.evdo.dbm == INT_MAX);
++    response(0, [&] { radio::getSignalStrengthResponse(0, RESPONSE_SOLICITED, 29, RIL_E_SUCCESS, vendorSignal, sizeof(vendorSignal)); });
++    CHECK(cb->last == "getSignalStrengthResponse_1_4"); CHECK(cb->lastInfo.error == RadioError::NONE);
++    response(0, [&] { radio::currentSignalStrengthInd(0, 0, 0, RIL_E_SUCCESS, vendorSignal, sizeof(vendorSignal)); });
++    CHECK(indications[0]->last == "currentSignalStrength_1_4");
++    vendorSignal[9] = INT_MIN; vendorSignal[10] = -1;
++    convertRilSignalStrengthToHal(vendorSignal, sizeof(vendorSignal), decoded);
++    CHECK(decoded.lte.rsrp == INT_MAX); CHECK(decoded.lte.rsrq == INT_MAX);
++    CHECK(vendorSignal[9] == INT_MIN); CHECK(vendorSignal[4] == 0x22222222);
++    vendor.version = 15; CHECK(!validSignalStrengthSize(sizeof(vendorSignal))); vendor.version = 12;
++    service->mRadioResponseV1_4 = nullptr; service->mRadioResponseV1_3 = nullptr; service->mRadioResponseV1_2 = nullptr;
++    RIL_SignalStrength_v10 strength = {};
++    response(0, [&] { radio::getSignalStrengthResponse(0, RESPONSE_SOLICITED, 28, RIL_E_SUCCESS, &strength, sizeof(strength)); });
++    CHECK(cb->last == "getSignalStrengthResponse");
++    printf("PASS: %d checks; no real modem or binder service used\n", checks);
++    fflush(stdout);
++    return 0;
++}
+-- 
+2.34.1
+

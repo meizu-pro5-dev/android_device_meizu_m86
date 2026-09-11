@@ -13,5 +13,36 @@
         "after": "4589835a6254d2f788122b2957d2a269af9ff6a0ca25f8e135cf5143ff347c70"
       }
     }
+  },
+  {
+    "repository": "hardware/ril",
+    "base_head": "ff9403ff624c153bfd1e4b68d5fc396c8bd64c8e",
+    "patch": "patches/0002-radio-legacy-hidl-1.4.patch",
+    "files": {
+      "libril/Android.mk": {
+        "before": "3646c0c28887c9b453fa3efbbb3c5372939e615f2104bab40fa0380ab03b5e32",
+        "after": "5b3993a44462200d08b75f44745d5f9c987ef859d09109321847b3d3afbb7070"
+      },
+      "libril/ril_service.cpp": {
+        "before": "b65d9ba25a3abcad3dfbc99390ebb300baffd906e9c3bfc9b9a426bb08cbc558",
+        "after": "3ea7d3eec0806c3d8f93e45521a856fdd9ac391d0d42e6b6e39eed4a031b9783"
+      },
+      "libril/ril_service_1_4.inc": {
+        "before": null,
+        "after": "0344b560ff31dd2cc235e38dde6363123d7181a85a89104504215d6b7dca6ca9"
+      },
+      "libril/tests/README.md": {
+        "before": null,
+        "after": "85ccdea0987718e8ee1faf48194e43dc28fc731ab913a6166cb23c57e8981861"
+      },
+      "libril/tests/radio14_mocks.h": {
+        "before": null,
+        "after": "4f8364a5854e24c36d1060b4a363daaa0c75cf678e6bd0b86852ef93c57b5551"
+      },
+      "libril/tests/radio14_test.cpp": {
+        "before": null,
+        "after": "38ec45d88cb810f71e69206daf266c5badc1d6aed31701b4c8e06d4bd6a9764d"
+      }
+    }
   }
 ]
