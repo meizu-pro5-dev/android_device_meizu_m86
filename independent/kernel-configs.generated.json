@@ -2,21 +2,21 @@
   "cm_pro5_vendor_defconfig": {
     "base": "cm_pro5_defconfig",
     "base_sha256": "3332387b6dc03b1b3b422cf7c9f06e68dba3f79395ab6be8e122daffb9f6839b",
-    "sha256": "6ee2b5141d2eb4e6e73cdd1e295630825bc9d008136cb38bf69f726a37774caf"
+    "sha256": "cd9ef42f9d101f4c66979616cdd8c2a40acc1f56f4c0b4fd93ad32f0e1e7f0df"
   },
   "cm_pro5_r22p0_vendor_defconfig": {
     "base": "cm_pro5_r22p0_defconfig",
     "base_sha256": "8c0b5ded918527bd6e7818f80efd876811bceeca78e5afb316d47b87b6d24a9e",
-    "sha256": "29e9808478de3fc9a8932602782a121f88d10f6c740a41b7e811f185e831a945"
+    "sha256": "276316ed47c95caff5b8a56957476c9188826d2983c15c0d0d4ae84b368f71a9"
   },
   "cm_pro5_raw_navigation_vendor_defconfig": {
     "base": "cm_pro5_raw_navigation_defconfig",
     "base_sha256": "9056310e133c22bdb5b2b9b21770c4a03cb943ee7cd967158fdfb7847f9ff172",
-    "sha256": "5cca5737ede8b635a615729cebc71f5131548dbf4676215f7c6c767367e7d3c7"
+    "sha256": "b534f8446e000ce0dd2fca18d6daa6ef658fbd417ac93dda1357561ce0fb7138"
   },
   "cm_pro5_raw_navigation_r22p0_vendor_defconfig": {
     "base": "cm_pro5_raw_navigation_r22p0_defconfig",
     "base_sha256": "209cc4d0b7829406c5f09aa84c0b35fecf076f80b58247329938bd7d8d765a16",
-    "sha256": "1be417805973b88703069deb91b19e2f786507c6c3b9b80286c2d22a48bec6ea"
+    "sha256": "3469c7f4f0fb4246c5c15567056554fc658f7eb8e4a18f7d912b1d9fec491f3a"
   }
 }

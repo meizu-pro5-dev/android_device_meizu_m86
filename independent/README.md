@@ -128,3 +128,27 @@ a kernel renameat2(flags=0) backport. Both BoringSSL self-tests and classpath
 generation then passed. A14 has not completed boot: gralloc loading is
 blocked by the old kernel's same-process thread procfs access behavior.
 The proposed ptrace correction is not applied in this checkpoint.
+
+## CAPEX dm-verity follow-up (2026-09-08)
+
+The local kernel now enables DM_VERITY and implements ignore_zero_blocks and
+restart_on_corruption for A14 apexd. Together with renameat2 and both procfs
+thread-group fixes, the user's restored original A14 GSI completed boot.
+All 20 original CAPEX hashes matched; 20 dm-verity targets reported valid,
+and both Conscrypt self-tests passed. The earlier CAPEX-to-APEX workaround
+is no longer required for this image. Nine file-backed integrity/argument
+checks passed, including rejection of data and hash-tree corruption. A
+corruption-triggered reboot was not deliberately tested. These follow-up
+source changes are local until the next publication; the published manifest
+checkpoint above predates them.
+
+### TFA firmware path boundary
+
+The TFA library embeds complete filenames beginning with `/etc/tfa98xx/`
+(13 bytes). Its vendor replacement is `/vendor//tfa/` (also 13 bytes),
+resolving to the packaged `/vendor/tfa` directory. Do not shorten this prefix:
+NUL padding before the remaining filename turns all firmware reads into
+reads of the directory itself. `prepare-independent-vendor.py` rejects
+shortened replacements that would truncate a C-string suffix. Both ABI
+inputs preserve all ten complete filenames; the current product installs
+only the 32-bit TFA library. Speaker runtime verification remains required.

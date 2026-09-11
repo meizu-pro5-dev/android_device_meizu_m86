@@ -90,7 +90,7 @@
       "strings": [
         {
           "from": "/etc/tfa98xx/",
-          "to": "/vendor/tfa/",
+          "to": "/vendor//tfa/",
           "count": 10
         }
       ]
@@ -99,7 +99,7 @@
       "strings": [
         {
           "from": "/etc/tfa98xx/",
-          "to": "/vendor/tfa/",
+          "to": "/vendor//tfa/",
           "count": 10
         }
       ]
