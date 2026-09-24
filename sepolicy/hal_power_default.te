@@ -1,2 +1,6 @@
 # Keep Power HAL access narrower than the generic CPU sysfs tree.
 allow hal_power_default m86_sysfs_power:file { getattr open write };
+
+# Dynamic top-app SchedTune hint; DAC limits writes to the selected node.
+allow hal_power_default cgroup:dir search;
+allow hal_power_default cgroup:file { getattr open write };

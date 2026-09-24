@@ -7,6 +7,10 @@
 
 #include <aidl/android/hardware/power/BnPower.h>
 
+#include <array>
+#include <chrono>
+#include <condition_variable>
+#include <thread>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -16,7 +20,7 @@ namespace aidl::android::hardware::power::impl::m86 {
 class Power : public BnPower {
  public:
   Power();
-  ~Power() override = default;
+  ~Power() override;
 
   ndk::ScopedAStatus setMode(Mode type, bool enabled) override;
   ndk::ScopedAStatus isModeSupported(Mode type, bool* supported) override;
@@ -33,8 +37,17 @@ class Power : public BnPower {
   void ApplyPowerProfileLocked(bool low_power);
   void ApplyGpuFloorLocked();
   void ApplyGpuCeilingLocked();
-  void SendInteractionBoostLocked(bool launch);
-  void SendDisplayUpdateBoostLocked();
+  void RequestBoostLocked(size_t source, int32_t duration_ms, int default_ms);
+  void ApplyBoostLocked();
+  void BoostWorker();
+  using Clock = std::chrono::steady_clock;
+  std::array<Clock::time_point, 3> boost_deadlines_{};
+  std::condition_variable boost_cv_;
+  std::thread boost_worker_;
+  bool stop_boost_ = false;
+  int applied_boost_ = -1;
+  unsigned int boost_requests_ = 0;
+  unsigned int boost_errors_ = 0;
 
   std::mutex lock_;
   bool interactive_ = true;

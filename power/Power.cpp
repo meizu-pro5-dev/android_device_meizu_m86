@@ -9,6 +9,7 @@
 
 #include <log/log.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -17,12 +18,9 @@
 namespace aidl::android::hardware::power::impl::m86 {
 namespace {
 
-constexpr char kCpu0BoostPulse[] =
-    "/sys/devices/system/cpu/cpu0/cpufreq/interactive/boostpulse";
-constexpr char kCpu0BoostDuration[] =
-    "/sys/devices/system/cpu/cpu0/cpufreq/interactive/boostpulse_duration";
-constexpr char kHmpBoostPulse[] = "/sys/kernel/hmp/boostpulse";
-constexpr char kHmpBoostDuration[] = "/sys/kernel/hmp/boostpulse_duration";
+constexpr char kTopAppBoost[] = "/dev/stune/top-app/schedtune.boost";
+constexpr int kBaseBoost = 15;
+constexpr int kInteractionBoost = 30;
 constexpr char kHotplugProfile[] =
     "/sys/module/exynos_march_cpu_hotplug/parameters/current_profile_no";
 constexpr char kHotplugBigCluster[] =
@@ -36,10 +34,6 @@ constexpr char kGpuDvfsMaxLock[] =
 
 constexpr char kProfileHigh[] = "0";
 constexpr char kProfileEco[] = "2";
-constexpr char kLittleBoostDurationUs[] = "80000";
-constexpr char kDisplayBoostDurationUs[] = "120000";
-constexpr char kHmpInteractionDurationUs[] = "250000";
-constexpr char kHmpLaunchDurationUs[] = "500000";
 constexpr char kGpuUnlock[] = "0";
 constexpr char kGpuFloorRendering[] = "420";
 constexpr char kGpuCeilingLimited[] = "544";
@@ -64,19 +58,13 @@ int WriteNode(const char* path, const char* value) {
   return 0;
 }
 
-void SendBoostPulse(const char* duration_path, const char* pulse_path,
-                    const char* duration_us) {
-  if (WriteNode(duration_path, duration_us) == 0) {
-    WriteNode(pulse_path, "1");
-  }
-}
-
 }  // namespace
 
 Power::Power() {
   std::lock_guard<std::mutex> guard(lock_);
-  WriteNode(kCpu0BoostDuration, kLittleBoostDurationUs);
+  ApplyBoostLocked();
   ApplyPowerProfileLocked(false);
+  boost_worker_ = std::thread(&Power::BoostWorker, this);
 }
 
 void Power::ApplyGpuFloorLocked() {
@@ -103,27 +91,68 @@ void Power::ApplyGpuCeilingLocked() {
   }
 }
 
-void Power::SendDisplayUpdateBoostLocked() {
-  if (!interactive_ || display_inactive_) {
-    return;
+Power::~Power() {
+  {
+    std::lock_guard<std::mutex> guard(lock_);
+    stop_boost_ = true;
+    boost_deadlines_.fill(Clock::time_point{});
+    ApplyBoostLocked();
+    boost_cv_.notify_all();
   }
+  if (boost_worker_.joinable()) boost_worker_.join();
+}
 
-  if (!low_power_) {
-    SendBoostPulse(kHmpBoostDuration, kHmpBoostPulse,
-                   kDisplayBoostDurationUs);
+void Power::ApplyBoostLocked() {
+  const auto now = Clock::now();
+  const bool allowed = interactive_ && !display_inactive_ && !low_power_ &&
+                       !sustained_performance_ && !stop_boost_;
+  if (!allowed) boost_deadlines_.fill(Clock::time_point{});
+  bool active = false;
+  for (auto& deadline : boost_deadlines_) {
+    if (deadline > now) active = true;
+    else deadline = Clock::time_point{};
+  }
+  const int value = active ? kInteractionBoost : kBaseBoost;
+  if (value != applied_boost_) {
+    const int error = WriteNode(kTopAppBoost, value == kBaseBoost ? "15" : "30");
+    if (!error) applied_boost_ = value;
+    else {
+      ++boost_errors_;
+      if (boost_errors_ == 1 || boost_errors_ % 100 == 0)
+        ALOGW("SchedTune boost write failed: %s", strerror(-error));
+    }
   }
 }
 
-void Power::SendInteractionBoostLocked(bool launch) {
-  if (!launch && (!interactive_ || display_inactive_)) {
-    return;
+void Power::RequestBoostLocked(size_t source, int32_t duration_ms, int default_ms) {
+  ++boost_requests_;
+  if (duration_ms < 0) {
+    boost_deadlines_[source] = Clock::time_point{};
+  } else if (interactive_ && !display_inactive_ && !low_power_ &&
+             !sustained_performance_) {
+    const int duration = duration_ms == 0 ? default_ms :
+                         std::min(duration_ms, 2000);
+    boost_deadlines_[source] = std::max(boost_deadlines_[source],
+        Clock::now() + std::chrono::milliseconds(duration));
   }
-  if (!low_power_) {
-    SendBoostPulse(kHmpBoostDuration, kHmpBoostPulse,
-                   launch ? kHmpLaunchDurationUs
-                          : kHmpInteractionDurationUs);
+  ApplyBoostLocked();
+  boost_cv_.notify_all();
+}
+
+void Power::BoostWorker() {
+  std::unique_lock<std::mutex> guard(lock_);
+  while (!stop_boost_) {
+    ApplyBoostLocked();
+    auto next = Clock::time_point::max();
+    for (const auto deadline : boost_deadlines_)
+      if (deadline != Clock::time_point{}) next = std::min(next, deadline);
+    // Retry failed writes, including baseline restoration, without spinning.
+    const int desired = next == Clock::time_point::max() ? kBaseBoost : kInteractionBoost;
+    if (desired != applied_boost_)
+      next = std::min(next, Clock::now() + std::chrono::milliseconds(100));
+    if (next == Clock::time_point::max()) boost_cv_.wait(guard);
+    else boost_cv_.wait_until(guard, next);
   }
-  WriteNode(kCpu0BoostPulse, "1");
 }
 
 void Power::ApplyPowerProfileLocked(bool low_power) {
@@ -156,9 +185,7 @@ ndk::ScopedAStatus Power::setMode(Mode type, bool enabled) {
       ApplyGpuCeilingLocked();
       break;
     case Mode::LAUNCH:
-      if (enabled) {
-        SendInteractionBoostLocked(true);
-      }
+      RequestBoostLocked(2, enabled ? 1000 : -1, 1000);
       break;
     case Mode::EXPENSIVE_RENDERING:
       expensive_rendering_ = enabled;
@@ -176,6 +203,8 @@ ndk::ScopedAStatus Power::setMode(Mode type, bool enabled) {
       break;
   }
 
+  ApplyBoostLocked();
+  boost_cv_.notify_all();
   return ndk::ScopedAStatus::ok();
 }
 
@@ -201,14 +230,10 @@ ndk::ScopedAStatus Power::setBoost(Boost type, int32_t duration_ms) {
 
   switch (type) {
     case Boost::INTERACTION:
-      if (duration_ms >= 0) {
-        SendInteractionBoostLocked(false);
-      }
+      RequestBoostLocked(0, duration_ms, 500);
       break;
     case Boost::DISPLAY_UPDATE_IMMINENT:
-      if (duration_ms >= 0) {
-        SendDisplayUpdateBoostLocked();
-      }
+      RequestBoostLocked(1, duration_ms, 120);
       break;
     default:
       break;
@@ -246,11 +271,18 @@ binder_status_t Power::dump(int fd, const char** args, uint32_t num_args) {
           "m86 AIDL PowerHAL\n"
           "interactive=%d display_inactive=%d low_power=%d sustained=%d "
           "expensive_rendering=%d gpu_floor=%s gpu_ceiling=%s "
-          "big_min_policy=0 hmp_us=120000/250000/500000\n",
+          "big_min_policy=0 cpu_boost=schedtune-b9\n",
           interactive_, display_inactive_, low_power_, sustained_performance_,
           expensive_rendering_,
           applied_gpu_floor_ == nullptr ? "unknown" : applied_gpu_floor_,
           applied_gpu_ceiling_ == nullptr ? "unknown" : applied_gpu_ceiling_);
+  dprintf(fd, "stune_base=%d stune_active=%d stune_applied=%d requests=%u errors=%u remaining_ms=",
+          kBaseBoost, kInteractionBoost, applied_boost_, boost_requests_, boost_errors_);
+  for (auto deadline : boost_deadlines_) {
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
+    dprintf(fd, "%lld ", static_cast<long long>(std::max<int64_t>(0, ms)));
+  }
+  dprintf(fd, "\n");
   return STATUS_OK;
 }
 
