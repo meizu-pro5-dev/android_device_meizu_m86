@@ -24,10 +24,6 @@ constexpr char kTopAppBoost[] = "/dev/stune/top-app/schedtune.boost";
 constexpr char kForegroundBoost[] = "/dev/stune/foreground/schedtune.boost";
 constexpr char kHotplugProfile[] =
     "/sys/module/exynos_march_cpu_hotplug/parameters/current_profile_no";
-constexpr char kHotplugBigCluster[] =
-    "/sys/module/exynos_march_cpu_hotplug/parameters/cl1_booster";
-constexpr char kHotplugBigMinimum[] =
-    "/sys/module/exynos_march_cpu_hotplug/parameters/min_cpu_boosted";
 constexpr char kGpuDvfsMinLock[] =
     "/sys/devices/14ac0000.mali/dvfs_min_lock";
 constexpr char kGpuDvfsMaxLock[] =
@@ -183,15 +179,10 @@ void Power::BoostWorker() {
 void Power::ApplyPowerProfileLocked(bool low_power) {
   const int profile_error =
       WriteNode(kHotplugProfile, low_power ? kProfileEco : kProfileHigh);
-  const int cluster_error = WriteNode(kHotplugBigCluster, low_power ? "0" : "1");
-  // Let March choose the big-core count without a forced minimum.
-  const int error = WriteNode(kHotplugBigMinimum, "0");
-  if (error != 0) {
-    ALOGW("Cannot reset %s to 0: %s", kHotplugBigMinimum, strerror(-error));
-  }
-
+  // The kernel online policy owns core targets. Eco mode temporarily uses
+  // legacy targets; returning to normal restores the selected online policy.
   low_power_ = low_power;
-  profile_applied_ = profile_error == 0 && cluster_error == 0 && error == 0;
+  profile_applied_ = profile_error == 0;
   ApplyGpuCeilingLocked();
   ApplyGpuFloorLocked();
 }
@@ -296,7 +287,7 @@ binder_status_t Power::dump(int fd, const char** args, uint32_t num_args) {
           "m86 AIDL PowerHAL\n"
           "interactive=%d display_inactive=%d low_power=%d sustained=%d "
           "expensive_rendering=%d gpu_floor=%s gpu_ceiling=%s "
-          "big_min_policy=0 cpu_boost=schedtune-b10\n",
+          "core_targets=kernel_policy cpu_boost=schedtune-b11\n",
           interactive_, display_inactive_, low_power_, sustained_performance_,
           expensive_rendering_,
           applied_gpu_floor_ == nullptr ? "unknown" : applied_gpu_floor_,

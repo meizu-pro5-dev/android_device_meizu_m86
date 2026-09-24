@@ -197,3 +197,8 @@ DEVICE_MANIFEST_FILE := $(M86_PATH)/independent/manifest.xml $(DEVICE_MANIFEST_F
 DEVICE_MATRIX_FILE := $(M86_PATH)/independent/compatibility_matrix.xml
 BOARD_ROOT_EXTRA_FOLDERS := $(filter-out efs mnv,$(BOARD_ROOT_EXTRA_FOLDERS))
 endif
+
+# B11 EAS experiment, derived from the verified B8 runtime configuration.
+ifeq ($(M86_ENABLE_EAS_EXPERIMENT),true)
+TARGET_KERNEL_CONFIG := cm_pro5_eas_vendor_defconfig
+endif

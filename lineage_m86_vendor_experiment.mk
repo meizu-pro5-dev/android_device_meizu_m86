@@ -9,3 +9,5 @@ PRODUCT_USE_VNDK_OVERRIDE := true
 
 $(call inherit-product, device/meizu/m86/lineage_m86.mk)
 PRODUCT_NAME := lineage_m86_vendor_experiment
+
+M86_ENABLE_EAS_EXPERIMENT := true
