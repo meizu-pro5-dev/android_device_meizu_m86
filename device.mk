@@ -269,3 +269,7 @@ $(call inherit-product, hardware/samsung_slsi-linaro/config/config.mk)
 
 # Compile system application methods on the build host for the full-preopt test.
 PRODUCT_DEX_PREOPT_DEFAULT_FLAGS += --compiler-filter=speed -j2
+
+# Scheduler interaction groups, mounted by libprocessgroup.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/schedtune/m86-schedtune.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/m86-schedtune.rc
