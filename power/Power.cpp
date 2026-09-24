@@ -10,6 +10,8 @@
 #include <log/log.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <string>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -19,8 +21,7 @@ namespace aidl::android::hardware::power::impl::m86 {
 namespace {
 
 constexpr char kTopAppBoost[] = "/dev/stune/top-app/schedtune.boost";
-constexpr int kBaseBoost = 15;
-constexpr int kInteractionBoost = 30;
+constexpr char kForegroundBoost[] = "/dev/stune/foreground/schedtune.boost";
 constexpr char kHotplugProfile[] =
     "/sys/module/exynos_march_cpu_hotplug/parameters/current_profile_no";
 constexpr char kHotplugBigCluster[] =
@@ -62,6 +63,7 @@ int WriteNode(const char* path, const char* value) {
 
 Power::Power() {
   std::lock_guard<std::mutex> guard(lock_);
+  LoadBoostConfigLocked();
   ApplyBoostLocked();
   ApplyPowerProfileLocked(false);
   boost_worker_ = std::thread(&Power::BoostWorker, this);
@@ -102,7 +104,30 @@ Power::~Power() {
   if (boost_worker_.joinable()) boost_worker_.join();
 }
 
+void Power::LoadBoostConfigLocked() {
+  FILE* fp = fopen("/vendor/etc/m86-schedtune.conf", "re");
+  if (!fp) { ALOGW("No boost config; using B9 defaults"); return; }
+  int fg, base, active, interaction, display, launch;
+  char extra;
+  const int count = fscanf(fp, "%d %d %d %d %d %d %c", &fg, &base, &active,
+                           &interaction, &display, &launch, &extra);
+  fclose(fp);
+  if (count != 6 || fg < 0 || fg > 50 || base < 0 || base > 50 ||
+      active < base || active > 50 || interaction < 40 || interaction > 2000 ||
+      display < 40 || display > 2000 || launch < 40 || launch > 2000) {
+    ALOGE("Invalid boost config; using B9 defaults"); return;
+  }
+  foreground_boost_ = fg; base_boost_ = base; active_boost_ = active;
+  interaction_ms_ = interaction; display_ms_ = display; launch_ms_ = launch;
+  config_valid_ = true;
+}
+
 void Power::ApplyBoostLocked() {
+  if (applied_foreground_ != foreground_boost_) {
+    if (WriteNode(kForegroundBoost, std::to_string(foreground_boost_).c_str()) == 0)
+      applied_foreground_ = foreground_boost_;
+    else ++boost_errors_;
+  }
   const auto now = Clock::now();
   const bool allowed = interactive_ && !display_inactive_ && !low_power_ &&
                        !sustained_performance_ && !stop_boost_;
@@ -112,9 +137,9 @@ void Power::ApplyBoostLocked() {
     if (deadline > now) active = true;
     else deadline = Clock::time_point{};
   }
-  const int value = active ? kInteractionBoost : kBaseBoost;
+  const int value = active ? active_boost_ : base_boost_;
   if (value != applied_boost_) {
-    const int error = WriteNode(kTopAppBoost, value == kBaseBoost ? "15" : "30");
+    const int error = WriteNode(kTopAppBoost, std::to_string(value).c_str());
     if (!error) applied_boost_ = value;
     else {
       ++boost_errors_;
@@ -147,8 +172,8 @@ void Power::BoostWorker() {
     for (const auto deadline : boost_deadlines_)
       if (deadline != Clock::time_point{}) next = std::min(next, deadline);
     // Retry failed writes, including baseline restoration, without spinning.
-    const int desired = next == Clock::time_point::max() ? kBaseBoost : kInteractionBoost;
-    if (desired != applied_boost_)
+    const int desired = next == Clock::time_point::max() ? base_boost_ : active_boost_;
+    if (desired != applied_boost_ || applied_foreground_ != foreground_boost_)
       next = std::min(next, Clock::now() + std::chrono::milliseconds(100));
     if (next == Clock::time_point::max()) boost_cv_.wait(guard);
     else boost_cv_.wait_until(guard, next);
@@ -185,7 +210,7 @@ ndk::ScopedAStatus Power::setMode(Mode type, bool enabled) {
       ApplyGpuCeilingLocked();
       break;
     case Mode::LAUNCH:
-      RequestBoostLocked(2, enabled ? 1000 : -1, 1000);
+      RequestBoostLocked(2, enabled ? launch_ms_ : -1, launch_ms_);
       break;
     case Mode::EXPENSIVE_RENDERING:
       expensive_rendering_ = enabled;
@@ -230,10 +255,10 @@ ndk::ScopedAStatus Power::setBoost(Boost type, int32_t duration_ms) {
 
   switch (type) {
     case Boost::INTERACTION:
-      RequestBoostLocked(0, duration_ms, 500);
+      RequestBoostLocked(0, duration_ms, interaction_ms_);
       break;
     case Boost::DISPLAY_UPDATE_IMMINENT:
-      RequestBoostLocked(1, duration_ms, 120);
+      RequestBoostLocked(1, duration_ms, display_ms_);
       break;
     default:
       break;
@@ -271,13 +296,15 @@ binder_status_t Power::dump(int fd, const char** args, uint32_t num_args) {
           "m86 AIDL PowerHAL\n"
           "interactive=%d display_inactive=%d low_power=%d sustained=%d "
           "expensive_rendering=%d gpu_floor=%s gpu_ceiling=%s "
-          "big_min_policy=0 cpu_boost=schedtune-b9\n",
+          "big_min_policy=0 cpu_boost=schedtune-b10\n",
           interactive_, display_inactive_, low_power_, sustained_performance_,
           expensive_rendering_,
           applied_gpu_floor_ == nullptr ? "unknown" : applied_gpu_floor_,
           applied_gpu_ceiling_ == nullptr ? "unknown" : applied_gpu_ceiling_);
+  dprintf(fd, "config_valid=%d foreground=%d applied_foreground=%d default_ms=%d/%d/%d\n",
+          config_valid_, foreground_boost_, applied_foreground_, interaction_ms_, display_ms_, launch_ms_);
   dprintf(fd, "stune_base=%d stune_active=%d stune_applied=%d requests=%u errors=%u remaining_ms=",
-          kBaseBoost, kInteractionBoost, applied_boost_, boost_requests_, boost_errors_);
+          base_boost_, active_boost_, applied_boost_, boost_requests_, boost_errors_);
   for (auto deadline : boost_deadlines_) {
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
     dprintf(fd, "%lld ", static_cast<long long>(std::max<int64_t>(0, ms)));

@@ -39,6 +39,15 @@ class Power : public BnPower {
   void ApplyGpuCeilingLocked();
   void RequestBoostLocked(size_t source, int32_t duration_ms, int default_ms);
   void ApplyBoostLocked();
+  void LoadBoostConfigLocked();
+  int foreground_boost_ = 10;
+  int base_boost_ = 15;
+  int active_boost_ = 30;
+  int interaction_ms_ = 500;
+  int display_ms_ = 120;
+  int launch_ms_ = 1000;
+  int applied_foreground_ = -1;
+  bool config_valid_ = false;
   void BoostWorker();
   using Clock = std::chrono::steady_clock;
   std::array<Clock::time_point, 3> boost_deadlines_{};

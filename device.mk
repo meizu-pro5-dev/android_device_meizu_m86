@@ -273,3 +273,7 @@ PRODUCT_DEX_PREOPT_DEFAULT_FLAGS += --compiler-filter=speed -j2
 # Scheduler interaction groups, mounted by libprocessgroup.
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/schedtune/m86-schedtune.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/m86-schedtune.rc
+
+# Runtime Power HAL boost configuration.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/power/m86-schedtune.conf:$(TARGET_COPY_OUT_VENDOR)/etc/m86-schedtune.conf
