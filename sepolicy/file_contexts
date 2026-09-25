@@ -48,3 +48,5 @@
 # using a unique output path, so the generic and device services cannot both
 # own the same installed file.
 /(vendor|system/vendor)/bin/hw/android\.hardware\.gatekeeper@1\.0-service\.m86  u:object_r:hal_gatekeeper_default_exec:s0
+
+/dev/cluster[01]_freq_min    u:object_r:m86_cpu_qos_device:s0

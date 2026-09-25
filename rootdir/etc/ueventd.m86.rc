@@ -88,3 +88,7 @@
 /dev/umts_ipc0               0660   radio      radio
 /dev/umts_ipc1               0660   radio      radio
 /dev/umts_rfs0               0660   radio      radio
+
+# Independent Power HAL CPU minimum-frequency requests (released on fd close).
+/dev/cluster0_freq_min 0660 system system
+/dev/cluster1_freq_min 0660 system system

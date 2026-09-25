@@ -40,6 +40,9 @@ class Power : public BnPower {
   void RequestBoostLocked(size_t source, int32_t duration_ms, int default_ms);
   void ApplyBoostLocked();
   void LoadBoostConfigLocked();
+  void ApplyCpuFloorLocked(bool active);
+  std::array<int, 2> cpu_floor_fds_{{-1, -1}};
+  bool cpu_floor_ready_ = true;
   int foreground_boost_ = 10;
   int base_boost_ = 15;
   int active_boost_ = 30;

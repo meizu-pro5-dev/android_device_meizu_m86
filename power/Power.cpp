@@ -29,6 +29,10 @@ constexpr char kGpuDvfsMinLock[] =
 constexpr char kGpuDvfsMaxLock[] =
     "/sys/devices/14ac0000.mali/dvfs_max_lock";
 
+constexpr std::array<const char*, 2> kCpuFloorPaths{{
+    "/dev/cluster0_freq_min", "/dev/cluster1_freq_min"}};
+constexpr int32_t kCpuBoostFloorKHz = 1200000;
+
 constexpr char kProfileHigh[] = "0";
 constexpr char kProfileEco[] = "2";
 constexpr char kGpuUnlock[] = "0";
@@ -118,6 +122,49 @@ void Power::LoadBoostConfigLocked() {
   config_valid_ = true;
 }
 
+void Power::ApplyCpuFloorLocked(bool active) {
+  if (!active) {
+    for (int& fd : cpu_floor_fds_) {
+      if (fd >= 0) close(fd);
+      fd = -1;
+    }
+    cpu_floor_ready_ = true;
+    return;
+  }
+
+  // Each open owns a separate kernel request. Close releases only our floor,
+  // including when the HAL is killed; user minima and thermal maxima survive.
+  for (size_t i = 0; i < cpu_floor_fds_.size(); ++i) {
+    if (cpu_floor_fds_[i] >= 0) continue;
+    int fd = TEMP_FAILURE_RETRY(open(kCpuFloorPaths[i], O_WRONLY | O_CLOEXEC));
+    if (fd < 0) {
+      ++boost_errors_;
+      ALOGW("Cannot open CPU floor %s: %s", kCpuFloorPaths[i], strerror(errno));
+      break;
+    }
+    // This 3.10 PM QoS ABI accepts a native binary s32, in kHz. Its ASCII
+    // interface parses hexadecimal, so do not write decimal frequency text.
+    const ssize_t written = TEMP_FAILURE_RETRY(write(fd, &kCpuBoostFloorKHz,
+                                                     sizeof(kCpuBoostFloorKHz)));
+    if (written != static_cast<ssize_t>(sizeof(kCpuBoostFloorKHz))) {
+      ++boost_errors_;
+      ALOGW("Cannot apply CPU floor %s: %s", kCpuFloorPaths[i],
+            written < 0 ? strerror(errno) : "short write");
+      close(fd);
+      break;
+    }
+    cpu_floor_fds_[i] = fd;
+  }
+  cpu_floor_ready_ = cpu_floor_fds_[0] >= 0 && cpu_floor_fds_[1] >= 0;
+  if (!cpu_floor_ready_) {
+    // Roll back a partial acquisition and retry through the bounded worker.
+    for (int& fd : cpu_floor_fds_) {
+      if (fd >= 0) close(fd);
+      fd = -1;
+    }
+  }
+}
+
 void Power::ApplyBoostLocked() {
   if (applied_foreground_ != foreground_boost_) {
     if (WriteNode(kForegroundBoost, std::to_string(foreground_boost_).c_str()) == 0)
@@ -133,6 +180,7 @@ void Power::ApplyBoostLocked() {
     if (deadline > now) active = true;
     else deadline = Clock::time_point{};
   }
+  ApplyCpuFloorLocked(active);
   const int value = active ? active_boost_ : base_boost_;
   if (value != applied_boost_) {
     const int error = WriteNode(kTopAppBoost, std::to_string(value).c_str());
@@ -169,7 +217,8 @@ void Power::BoostWorker() {
       if (deadline != Clock::time_point{}) next = std::min(next, deadline);
     // Retry failed writes, including baseline restoration, without spinning.
     const int desired = next == Clock::time_point::max() ? base_boost_ : active_boost_;
-    if (desired != applied_boost_ || applied_foreground_ != foreground_boost_)
+    if (desired != applied_boost_ || applied_foreground_ != foreground_boost_ ||
+        !cpu_floor_ready_)
       next = std::min(next, Clock::now() + std::chrono::milliseconds(100));
     if (next == Clock::time_point::max()) boost_cv_.wait(guard);
     else boost_cv_.wait_until(guard, next);
@@ -287,11 +336,14 @@ binder_status_t Power::dump(int fd, const char** args, uint32_t num_args) {
           "m86 AIDL PowerHAL\n"
           "interactive=%d display_inactive=%d low_power=%d sustained=%d "
           "expensive_rendering=%d gpu_floor=%s gpu_ceiling=%s "
-          "core_targets=kernel_policy cpu_boost=schedtune-b11\n",
+          "core_targets=kernel_policy cpu_boost=schedtune-qos-b12\n",
           interactive_, display_inactive_, low_power_, sustained_performance_,
           expensive_rendering_,
           applied_gpu_floor_ == nullptr ? "unknown" : applied_gpu_floor_,
           applied_gpu_ceiling_ == nullptr ? "unknown" : applied_gpu_ceiling_);
+  dprintf(fd, "cpu_floor_khz=%d/%d cpu_floor_active=%d/%d cpu_floor_ready=%d\n",
+          kCpuBoostFloorKHz, kCpuBoostFloorKHz, cpu_floor_fds_[0] >= 0,
+          cpu_floor_fds_[1] >= 0, cpu_floor_ready_);
   dprintf(fd, "config_valid=%d foreground=%d applied_foreground=%d default_ms=%d/%d/%d\n",
           config_valid_, foreground_boost_, applied_foreground_, interaction_ms_, display_ms_, launch_ms_);
   dprintf(fd, "stune_base=%d stune_active=%d stune_applied=%d requests=%u errors=%u remaining_ms=",
