@@ -34,6 +34,12 @@
 #define FLYME_FINGERPRINT_HAL "/system/lib64/hw/fingerprint.m86.flyme.so"
 #endif
 
+/* Offsets verified against the unstripped Flyme 8 m86 HAL in the vendor. */
+#define FLYME_PRIVATE_LOCK_OFFSET 0x128
+#define FLYME_PRIVATE_BIO_OFFSET 0x188
+#define FLYME_PRIVATE_GID_OFFSET 0x190
+#define FLYME_MAX_TEMPLATES 5
+
 struct flyme_fingerprint_device {
   hw_device_t common;
   fingerprint_notify_t notify;
@@ -76,6 +82,9 @@ static pthread_mutex_t notify_lock = PTHREAD_MUTEX_INITIALIZER;
 static fingerprint_notify_t framework_notify;
 static int (*flyme_set_notify)(fingerprint_device_t *, fingerprint_notify_t);
 static int (*flyme_cancel)(fingerprint_device_t *);
+static int (*flyme_get_finger_ids)(void *, uint32_t *, uint32_t *);
+static void (*flyme_goto_idle)(void *);
+static void (*flyme_resume)(void *);
 static int cancel_in_progress;
 static int cancel_notified;
 
@@ -154,6 +163,72 @@ static int fingerprint_compat_cancel(fingerprint_device_t *device) {
   return status;
 }
 
+static int fingerprint_compat_enumerate(fingerprint_device_t *device) {
+  uint32_t ids[FLYME_MAX_TEMPLATES] = {0};
+  uint32_t count = FLYME_MAX_TEMPLATES;
+  uint32_t gid;
+  pthread_mutex_t *private_lock;
+  fingerprint_notify_t notify;
+  void *bio;
+  int status;
+
+  if (device == NULL || flyme_get_finger_ids == NULL ||
+      flyme_goto_idle == NULL || flyme_resume == NULL) {
+    return -ENOSYS;
+  }
+
+  private_lock = (pthread_mutex_t *)((char *)device +
+                                    FLYME_PRIVATE_LOCK_OFFSET);
+  pthread_mutex_lock(private_lock);
+  flyme_goto_idle(device);
+  bio = *(void **)((char *)device + FLYME_PRIVATE_BIO_OFFSET);
+  gid = *(uint32_t *)((char *)device + FLYME_PRIVATE_GID_OFFSET);
+  status = bio == NULL ? -ENODEV : flyme_get_finger_ids(bio, &count, ids);
+  flyme_resume(device);
+  pthread_mutex_unlock(private_lock);
+
+  if (status != 0 || count > FLYME_MAX_TEMPLATES) {
+    ALOGE("Cannot enumerate FPC templates: status=%d count=%u", status,
+          count);
+    return status != 0 ? -EIO : -EOVERFLOW;
+  }
+  for (uint32_t index = 0; index < count; ++index) {
+    if (ids[index] == 0) {
+      ALOGE("FPC returned an invalid template ID at index %u", index);
+      return -EIO;
+    }
+    for (uint32_t previous = 0; previous < index; ++previous) {
+      if (ids[index] == ids[previous]) {
+        ALOGE("FPC returned duplicate template ID %u", ids[index]);
+        return -EIO;
+      }
+    }
+  }
+
+  pthread_mutex_lock(&notify_lock);
+  notify = framework_notify;
+  pthread_mutex_unlock(&notify_lock);
+  if (notify == NULL) {
+    return -ENOSYS;
+  }
+
+  if (count == 0) {
+    fingerprint_msg_t message = {0};
+    message.type = FINGERPRINT_TEMPLATE_ENUMERATING;
+    notify(&message);
+  }
+  for (uint32_t index = 0; index < count; ++index) {
+    fingerprint_msg_t message = {0};
+    message.type = FINGERPRINT_TEMPLATE_ENUMERATING;
+    message.data.enumerated.finger.fid = ids[index];
+    message.data.enumerated.finger.gid = gid;
+    message.data.enumerated.remaining_templates = count - index - 1;
+    notify(&message);
+  }
+  ALOGI("Enumerated %u FPC templates for group %u", count, gid);
+  return 0;
+}
+
 static int fingerprint_compat_open(const hw_module_t *module, const char *id,
                                    hw_device_t **hardware_device) {
   const fingerprint_module_t *flyme_module;
@@ -210,12 +285,20 @@ static int fingerprint_compat_open(const hw_module_t *module, const char *id,
   get_authenticator_id = flyme_device->get_authenticator_id;
   flyme_cancel = flyme_device->cancel;
   cancel = fingerprint_compat_cancel;
-  enumerate = flyme_device->enumerate;
+  enumerate = fingerprint_compat_enumerate;
   remove = flyme_device->remove;
   set_active_group = flyme_device->set_active_group;
   authenticate = flyme_device->authenticate;
+  flyme_get_finger_ids = (int (*)(void *, uint32_t *, uint32_t *))
+      dlsym(handle, "fpc_tee_get_finger_ids");
+  flyme_goto_idle = (void (*)(void *))
+      dlsym(handle, "fingerprint_hal_goto_idle");
+  flyme_resume = (void (*)(void *))
+      dlsym(handle, "fingerprint_hal_resume");
   if (flyme_set_notify == NULL || get_authenticator_id == NULL ||
-      flyme_cancel == NULL || enumerate == NULL || remove == NULL ||
+      flyme_cancel == NULL || flyme_device->enumerate == NULL ||
+      flyme_get_finger_ids == NULL || flyme_goto_idle == NULL ||
+      flyme_resume == NULL || remove == NULL ||
       set_active_group == NULL || authenticate == NULL) {
     ALOGE("Flyme fingerprint HAL has an incomplete callback table");
     (*hardware_device)->close(*hardware_device);

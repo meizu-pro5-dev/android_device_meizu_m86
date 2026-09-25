@@ -24,12 +24,6 @@ PRODUCT_PACKAGES += \
     android.hardware.gatekeeper@1.0-impl \
     libgatekeeper_m86
 
-# The stock Flyme HAL stubs enumerate(), so FingerprintService's internal
-# template cleanup would never complete and would block every client; the
-# experiment overlay disables config_cleanupUnusedFingerprints.
-PRODUCT_PACKAGE_OVERLAYS += \
-    $(LOCAL_FINGERPRINT_EXPERIMENT_PATH)/experiments/overlay
-
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.fingerprint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.fingerprint.xml
 
