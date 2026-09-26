@@ -21,3 +21,12 @@ PRODUCT_PACKAGES += \
 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.hardware.gralloc=m86
+
+# Only the matched r22p0 stack exposes Vulkan. Keep r15p0 products GLES-only.
+# Advertise the conservative Vulkan 1.0 / level 0 contract; newer API, compute
+# feature levels and dated dEQP conformance levels need separate validation.
+ifeq ($(M86_GPU_DDK),r22p0)
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.vulkan.version-1_0_3.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.vulkan.version.xml \
+    frameworks/native/data/etc/android.hardware.vulkan.level-0.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.vulkan.level.xml
+endif
